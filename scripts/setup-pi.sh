@@ -57,7 +57,13 @@ ensure_swap() {
 # ── Node dependencies + client build ──────────────────────────────────────────
 echo "[3/7] Installing client dependencies..."
 cd "$HAVEN_DIR"
-npm install
+# The committed package-lock.json is generated on an x86_64 dev machine, so it
+# pins x64-only optional deps (e.g. @rollup/rollup-linux-x64-gnu). On the Pi's
+# arm64 CPU npm then fails to install the matching arm64 binary (npm/cli#4828).
+# Resolve fresh from package.json instead — and ignore the lockfile so we don't
+# leave it dirty (which would break the `git pull --ff-only` update path).
+rm -rf node_modules packages/*/node_modules
+npm install --no-package-lock
 
 echo "[4/7] Building the client (this can take a few minutes on a Pi)..."
 ensure_swap

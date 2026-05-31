@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+.vite/
+
+# Games — kept local for now (ship the empty folder structure only)
+games/*
+!games/.gitkeep
+
+# Local agent / editor config
+.claude/
+.vscode/
+.idea/
+
+# Environment & secrets
+.env
+.env.*
+*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS cruft
+.DS_Store
+Thumbs.db

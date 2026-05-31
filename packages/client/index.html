@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Haven</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      :root {
+        /* ─ Sky palette (neutral grays) ───────────────── */
+        --sky-deep:     #0B0C0E;   /* near-black, top      */
+        --sky-mid:      #15171A;   /* upper atmosphere    */
+        --sky-blue:     #22262B;   /* mid gray            */
+        --sky-horizon:  #3B4046;   /* horizon haze        */
+
+        /* ─ Cards ─────────────────────────────────────── */
+        --card:         rgba(28,30,34,0.72);
+        --card-solid:   #1A1D21;
+        --card-light:   rgba(255,255,255,0.04);
+
+        /* ─ Borders ───────────────────────────────────── */
+        --border:       rgba(255,255,255,0.12);
+        --border-glow:  rgba(255,255,255,0.35);
+
+        /* ─ Accents (silver / white) ──────────────────── */
+        --sky:          #C9D1DA;   /* silver               */
+        --sky-light:    #E4E9EF;   /* pale silver          */
+        --cloud:        #F2F5F8;   /* cloud white          */
+        --sun:          #EDEFF2;   /* soft white highlight */
+        --sun-warm:     #D6DBE1;   /* warm gray            */
+        --horizon:      #AEB6C0;   /* horizon gray         */
+        --aurora:       #C4C9D2;   /* neutral shimmer      */
+
+        /* ─ Text ──────────────────────────────────────── */
+        --text:         #F5F7FA;   /* near-white text      */
+        --text-mid:     #A5ACB6;   /* muted gray           */
+        --text-dim:     #565C66;   /* dim gray             */
+      }
+
+      html, body {
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        background: var(--sky-deep);
+        color: var(--text);
+        min-height: 100dvh;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+      #root { min-height: 100dvh; }
+
+      /* ─ Utility ─────────────────────────────────────── */
+      .nunito { font-family: 'Nunito', system-ui, sans-serif; }
+      .mono   { font-family: 'DM Mono', monospace; }
+
+      /* ─ Glass card ──────────────────────────────────── */
+      .glass {
+        background: var(--card);
+        backdrop-filter: blur(32px) saturate(200%) brightness(115%);
+        -webkit-backdrop-filter: blur(32px) saturate(200%) brightness(115%);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        box-shadow:
+          0 12px 48px rgba(0,0,0,0.5),
+          inset 0 1px 0 rgba(255,255,255,0.14),   /* top glass edge */
+          inset 0 0 40px rgba(40,44,50,0.3);
+      }
+
+      /* ─ Primary button ──────────────────────────────── */
+      .btn {
+        font-family: 'Nunito', sans-serif;
+        font-weight: 800;
+        border: none;
+        border-radius: 100px;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s;
+      }
+      .btn-sky {
+        background: linear-gradient(135deg, #E4E9EF, #C2CAD4);
+        color: #14171A;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.6);
+      }
+      .btn-sky:hover  { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.45); }
+      .btn-sky:active { transform: scale(0.97); }
+
+      .btn-ghost {
+        background: rgba(255,255,255,0.06);
+        color: var(--text-mid);
+        border: 1px solid var(--border);
+      }
+      .btn-ghost:hover { background: rgba(255,255,255,0.10); color: var(--text); }
+
+      /* ─ Swatch ──────────────────────────────────────── */
+      .swatch {
+        width: 28px; height: 28px; border-radius: 50%;
+        cursor: pointer; border: 2.5px solid transparent;
+        transition: transform 0.12s, border-color 0.12s, box-shadow 0.12s;
+        flex-shrink: 0;
+      }
+      .swatch:hover  { transform: scale(1.12); }
+      .swatch.active { border-color: white; box-shadow: 0 0 0 3px rgba(255,255,255,0.25); transform: scale(1.15); }
+
+      /* ─ Scrollbars ──────────────────────────────────── */
+      ::-webkit-scrollbar { width: 4px; height: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+
+      /* ─ Animations ──────────────────────────────────── */
+      @keyframes fadeIn   { from { opacity:0 } to { opacity:1 } }
+      @keyframes slideUp  { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:none } }
+      @keyframes popIn    { 0% { opacity:0; transform:scale(0.85) } 70% { transform:scale(1.04) } 100% { opacity:1; transform:scale(1) } }
+      @keyframes cardIn   { from { opacity:0; transform:translateY(20px) scale(0.95) } to { opacity:1; transform:none } }
+      @keyframes blink    { 0%,100% { opacity:1 } 50% { opacity:0 } }
+      @keyframes dotPulse { 0%,100% { opacity:1 } 50% { opacity:0.3 } }
+      @keyframes marquee  { from { transform:translateX(0) } to { transform:translateX(-50%) } }
+
+      /* Float — characters bobbing in the sky */
+      @keyframes float {
+        0%,100% { transform: translateY(0px); }
+        50%      { transform: translateY(-10px); }
+      }
+
+      /* Glow pulse — sun/light breathing */
+      @keyframes glow {
+        0%,100% { filter: drop-shadow(0 6px 20px rgba(255,255,255,0.35)); }
+        50%      { filter: drop-shadow(0 10px 40px rgba(255,255,255,0.6)); }
+      }
+
+      /* Cloud drift — slow ambient cloud movement */
+      @keyframes cloudDrift {
+        0%   { transform: translate(0,0) scale(1); }
+        30%  { transform: translate(40px,-15px) scale(1.05); }
+        60%  { transform: translate(-20px,10px) scale(0.97); }
+        100% { transform: translate(0,0) scale(1); }
+      }
+
+      /* Shimmer — light across glass surface */
+      @keyframes shimmer {
+        0%   { transform: translateX(-200%) skewX(-20deg); }
+        100% { transform: translateX(300%) skewX(-20deg); }
+      }
+
+      /* Boot ascend — logo rising from clouds */
+      @keyframes ascend {
+        0%   { opacity:0; transform: translateY(40px) scale(0.9); filter:blur(12px); }
+        60%  { opacity:1; transform: translateY(-4px) scale(1.02); filter:blur(0); }
+        100% { opacity:1; transform: translateY(0) scale(1); }
+      }
+
+      /* Aurora wave */
+      @keyframes aurora {
+        0%,100% { opacity:0.4; transform: scaleX(1) scaleY(1); }
+        50%      { opacity:0.7; transform: scaleX(1.1) scaleY(0.95); }
+      }
+
+      /* Tile hover */
+      .tile { transition: transform 0.18s ease, box-shadow 0.18s ease; }
+      .tile:hover  { transform: translateY(-5px) scale(1.02); }
+      .tile:active { transform: scale(0.97); }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

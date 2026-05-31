@@ -42,11 +42,13 @@ echo "  Target: $TARGET_DIR"
 echo ""
 
 # ── System packages ───────────────────────────────────────────────────────────
-# git for cloning, curl for the Node setup script, plus the kiosk runtime deps
-# (Chromium browser + unclutter to hide the cursor) that a headless image lacks.
-echo "[1/4] Installing system packages (git, curl, chromium, unclutter)..."
+# git for cloning, curl for the Node setup script, python3 for the server
+# runtime, plus the kiosk runtime deps (Chromium browser + unclutter to hide the
+# cursor) that a headless image lacks. (Node itself is installed by setup-pi.sh,
+# and is only needed to build the client.)
+echo "[1/4] Installing system packages (git, curl, python3, chromium, unclutter)..."
 sudo apt-get update
-sudo apt-get install -y git curl ca-certificates unclutter
+sudo apt-get install -y git curl ca-certificates python3 python3-venv python3-pip unclutter
 
 # Chromium package name differs across Raspberry Pi OS releases.
 if ! command -v chromium-browser &>/dev/null && ! command -v chromium &>/dev/null; then
@@ -78,6 +80,6 @@ bash scripts/setup-pi.sh
 echo ""
 echo "[4/4] ✓ Haven bootstrapped from GitHub."
 echo ""
-echo "  Update later with:  cd $TARGET_DIR && git pull && npm run build && sudo systemctl restart haven"
+echo "  Update later with:  cd $TARGET_DIR && git pull && bash scripts/setup-pi.sh"
 echo "  Reboot to launch the console in kiosk mode:  sudo reboot"
 echo ""

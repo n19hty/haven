@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { RoomState, Player } from "@haven/shared";
+import { RoomState, Player, GameMeta } from "@haven/shared";
 import { Character } from "../components/Character";
 import { SkyBackground } from "../components/SkyBackground";
 import { Profile } from "../hooks/useProfiles";
@@ -9,6 +9,9 @@ interface Props {
   roomState: RoomState;
   myPlayer: Player;
   profile: Profile;
+  games?: GameMeta[];
+  isHost?: boolean;
+  onLaunch?: (gameId: string) => void;
 }
 
 function useViewport() {
@@ -81,8 +84,9 @@ function PlayerSlot({ player, index, isMe, profile }: {
   );
 }
 
-export function ConsoleHomeView({ roomState, myPlayer, profile }: Props) {
+export function ConsoleHomeView({ roomState, myPlayer, profile, games = [], isHost = false, onLaunch }: Props) {
   const { room } = roomState;
+  const canLaunch = isHost && room.players.length >= 2;
   const { w }    = useViewport();
   const isMobile = w < 900;
   const [time, setTime]     = useState(new Date());
@@ -300,6 +304,51 @@ export function ConsoleHomeView({ roomState, myPlayer, profile }: Props) {
               </div>
             </div>
           </div>
+
+          {/* ── Playable games ─────────────────────────────────────────── */}
+          {games.length > 0 && (
+            <div style={{ flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                <span className="nunito" style={{ fontWeight: 800, fontSize: 13, color: "var(--text)" }}>
+                  Games
+                </span>
+                <div style={{ flex: 1, height: 1, background: "linear-gradient(90deg, rgba(255,255,255,0.15), transparent)" }} />
+                <span className="nunito" style={{ fontSize: 11, color: "var(--text-dim)" }}>
+                  {canLaunch ? "Tap to play" : isHost ? "Need 2 players" : "Host picks"}
+                </span>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
+                {games.map((g) => (
+                  <button
+                    key={g.id}
+                    onClick={() => canLaunch && onLaunch?.(g.id)}
+                    disabled={!canLaunch}
+                    className="tile glass nunito"
+                    style={{
+                      width: isMobile ? 124 : 152, height: isMobile ? 96 : 118,
+                      borderRadius: 16, flexShrink: 0,
+                      background: "linear-gradient(145deg, rgba(56,189,248,0.14) 0%, rgba(8,18,52,0.7) 100%)",
+                      border: "1px solid rgba(56,189,248,0.25)",
+                      display: "flex", flexDirection: "column",
+                      alignItems: "center", justifyContent: "center", gap: 8,
+                      cursor: canLaunch ? "pointer" : "default",
+                      opacity: canLaunch ? 1 : 0.55,
+                      position: "relative", overflow: "hidden",
+                    }}
+                  >
+                    <span style={{ fontSize: isMobile ? 26 : 32 }}>{g.thumbnail ?? "🎮"}</span>
+                    <span style={{ fontSize: isMobile ? 11 : 12, fontWeight: 800, color: "var(--text)" }}>
+                      {g.name}
+                    </span>
+                    <span style={{ fontSize: 9, color: "var(--text-dim)" }}>
+                      {g.minPlayers === g.maxPlayers ? `${g.minPlayers} players` : `${g.minPlayers}–${g.maxPlayers} players`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ── Library shelf ──────────────────────────────────────────── */}
           <div style={{ flexShrink: 0 }}>

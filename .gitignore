@@ -6,9 +6,21 @@ dist/
 *.tsbuildinfo
 .vite/
 
-# Games — kept local for now (ship the empty folder structure only)
+# Python (server runtime)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Games — local experiments stay out of git, but bundled games (shipped to the
+# Pi on a fresh install) are explicitly re-included below.
 games/*
 !games/.gitkeep
+!games/tic-tac-toe/
+!games/tic-tac-toe/**
+# ...but never ship Python build artifacts, even for bundled games
+games/**/__pycache__/
+games/**/*.py[cod]
 
 # Local agent / editor config
 .claude/

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useGameStore } from "./hooks/useGameStore";
 import { useSocket, getSocket } from "./hooks/useSocket";
 import { TVView } from "./views/TVView";
@@ -7,19 +7,22 @@ import { EntryView } from "./views/EntryView";
 import { BootAnimation } from "./views/BootAnimation";
 import { LoginScreen } from "./views/LoginScreen";
 import { Profile } from "./hooks/useProfiles";
-import { RoomState, Player } from "@haven/shared";
+import { RoomState, Player, GameMeta } from "@haven/shared";
+import "./games/ticTacToe"; // registers the game's TV + controller components
 
 let activeProfile: Profile | null = null;
 
 export function App() {
   const store       = useGameStore();
   const hosted      = useRef(false);
+  const [games, setGames] = useState<GameMeta[]>([]);
   const joinCode    = new URLSearchParams(window.location.search).get("join");
   const isPhoneMode = !!joinCode;
 
   useSocket({
     "room:state": (s: RoomState) => store.setRoomState(s),
     "room:error": (m: string)    => store.setError(m),
+    "game:list":  (g: GameMeta[]) => setGames(g),
   });
 
   useEffect(() => {
@@ -69,7 +72,7 @@ export function App() {
   return (
     <>
       {store.error && <Err msg={store.error} onClose={() => store.setError(null)} />}
-      <TVView roomState={store.roomState} myPlayer={store.myPlayer} profile={activeProfile} />
+      <TVView roomState={store.roomState} myPlayer={store.myPlayer} profile={activeProfile} games={games} />
     </>
   );
 }

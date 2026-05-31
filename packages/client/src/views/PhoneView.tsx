@@ -1,6 +1,8 @@
 import React from "react";
-import { RoomState, Player } from "@haven/shared";
+import { RoomState, Player, PlayerAction } from "@haven/shared";
 import { SkyBackground } from "../components/SkyBackground";
+import { getGameControllerComponent } from "../games/registry";
+import { getSocket } from "../hooks/useSocket";
 
 interface Props {
   roomState: RoomState;
@@ -9,6 +11,11 @@ interface Props {
 
 export function PhoneView({ roomState, myPlayer }: Props) {
   const { room } = roomState;
+
+  // ── In-game: hand the phone over to the game's controller ──────────────────
+  if (room.phase !== "lobby") {
+    return <PhoneGameStage roomState={roomState} myPlayer={myPlayer} />;
+  }
 
   return (
     <div style={{
@@ -132,6 +139,56 @@ export function PhoneView({ roomState, myPlayer }: Props) {
       }}>
         haven · above the clouds
       </div>
+    </div>
+  );
+}
+
+// ── In-game controller surface ────────────────────────────────────────────────
+function PhoneGameStage({ roomState, myPlayer }: Props) {
+  const { room, gameState, scores } = roomState;
+  const Controller = room.gameId ? getGameControllerComponent(room.gameId) : null;
+  const onAction = (a: PlayerAction) => getSocket().emit("player:action", a);
+
+  return (
+    <div style={{
+      minHeight: "100dvh", position: "relative",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      padding: "32px 18px", fontFamily: "'Inter', sans-serif",
+      overflow: "hidden", animation: "fadeIn 0.4s ease-out",
+    }}>
+      <SkyBackground />
+
+      <div className="nunito" style={{
+        position: "relative", zIndex: 1,
+        fontSize: 12, fontWeight: 700, letterSpacing: 1.5,
+        textTransform: "uppercase", color: "var(--text-dim)", marginBottom: 24,
+      }}>
+        {room.phase === "results" ? "Game over" : "Your move"}
+      </div>
+
+      {Controller ? (
+        <Controller
+          gameState={gameState}
+          players={room.players}
+          myPlayer={myPlayer}
+          scores={scores}
+          onAction={onAction}
+        />
+      ) : (
+        <div className="nunito" style={{ position: "relative", zIndex: 1, color: "var(--text-dim)" }}>
+          No controller for “{room.gameId}”.
+        </div>
+      )}
+
+      {room.phase === "results" && (
+        <div className="nunito" style={{
+          position: "relative", zIndex: 1, marginTop: 28,
+          fontSize: 13, color: "var(--text-dim)",
+        }}>
+          Waiting for the host to continue…
+        </div>
+      )}
     </div>
   );
 }

@@ -20,8 +20,18 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
+# The Chromium binary is named differently across Raspberry Pi OS releases.
+if command -v chromium-browser &>/dev/null; then
+  CHROMIUM=chromium-browser
+elif command -v chromium &>/dev/null; then
+  CHROMIUM=chromium
+else
+  echo "ERROR: Chromium not found (tried chromium-browser, chromium)." >&2
+  exit 1
+fi
+
 # Launch Chromium in kiosk mode
-chromium-browser \
+"$CHROMIUM" \
   --noerrdialogs \
   --disable-infobars \
   --disable-session-crashed-bubble \

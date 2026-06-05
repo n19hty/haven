@@ -21,7 +21,9 @@ export function TVView({ roomState, myPlayer, profile, games }: Props) {
   // Bluetooth controllers register as players and stream input. We fan their
   // events out to whichever game component subscribes via controllerInput.
   const listenersRef = useRef(new Set<(e: ControllerEvent) => void>());
-  useLocalControllers(myPlayer.id, (e) => listenersRef.current.forEach((l) => l(e)));
+  const controllerCount = useLocalControllers(myPlayer.id, (e) =>
+    listenersRef.current.forEach((l) => l(e)),
+  );
   const controllerInput = useCallback<ControllerInput>((handler) => {
     listenersRef.current.add(handler);
     return () => listenersRef.current.delete(handler);
@@ -35,6 +37,8 @@ export function TVView({ roomState, myPlayer, profile, games }: Props) {
         profile={profile}
         games={games}
         isHost={myPlayer.isHost}
+        controllerInput={controllerInput}
+        controllerCount={controllerCount}
         onLaunch={(gameId) => {
           socket.emit("game:select", gameId);
           socket.emit("game:start");

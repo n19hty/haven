@@ -1,8 +1,15 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Player, Room } from "@haven/shared";
 import { getSocket } from "./useSocket";
 import { useGamepads } from "./useGamepads";
 import { ControllerEvent } from "../games/registry";
+
+function connectedCount(): number {
+  if (typeof navigator === "undefined" || !navigator.getGamepads) return 0;
+  let n = 0;
+  for (const gp of navigator.getGamepads()) if (gp) n++;
+  return n;
+}
 
 // ─── Bluetooth controllers → local players ───────────────────────────────────
 //
@@ -22,13 +29,15 @@ import { ControllerEvent } from "../games/registry";
 export function useLocalControllers(
   hostPlayerId: string | null,
   onEvent: (e: ControllerEvent) => void,
-) {
+): number {
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
   const hostRef = useRef(hostPlayerId);
   hostRef.current = hostPlayerId;
   // gamepad index -> playerId
   const mapRef = useRef<Map<number, string>>(new Map());
+  // How many gamepads the page currently sees (for an on-screen indicator).
+  const [count, setCount] = useState(0);
 
   useEffect(() => {
     const socket = getSocket();
@@ -53,8 +62,14 @@ export function useLocalControllers(
       if (pid && index !== 0) socket.emit("player:leave", pid);
     };
 
-    const onConnect = (e: GamepadEvent) => claim(e.gamepad.index);
-    const onDisconnect = (e: GamepadEvent) => release(e.gamepad.index);
+    const onConnect = (e: GamepadEvent) => {
+      claim(e.gamepad.index);
+      setCount(connectedCount());
+    };
+    const onDisconnect = (e: GamepadEvent) => {
+      release(e.gamepad.index);
+      setCount(connectedCount());
+    };
 
     window.addEventListener("gamepadconnected", onConnect);
     window.addEventListener("gamepaddisconnected", onDisconnect);
@@ -62,6 +77,7 @@ export function useLocalControllers(
     if (navigator.getGamepads) {
       for (const gp of navigator.getGamepads()) if (gp) claim(gp.index);
     }
+    setCount(connectedCount());
 
     return () => {
       window.removeEventListener("gamepadconnected", onConnect);
@@ -82,4 +98,6 @@ export function useLocalControllers(
     const pid = mapRef.current.get(e.index);
     if (pid) onEventRef.current({ playerId: pid, control: e.control });
   });
+
+  return count;
 }

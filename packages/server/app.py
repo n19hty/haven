@@ -88,9 +88,30 @@ async def room_join(sid, code, player_name):
     return room, player
 
 
+@sio.on("local:register")
+async def local_register(sid, player_name):
+    # A second+ local player (a Bluetooth controller) joining the TV's room.
+    # The TV socket already owns the host; this adds another player to it.
+    result = rm.register_local_player(sid, player_name)
+    if "error" in result:
+        await sio.emit("room:error", result["error"], to=sid)
+        return None
+    room, player = result["room"], result["player"]
+    await broadcast(room["code"])
+    return room, player
+
+
 @sio.on("room:leave")
 async def room_leave(sid):
     code = rm.leave_room(sid)
+    if code:
+        await broadcast(code)
+
+
+@sio.on("player:leave")
+async def player_leave(sid, player_id):
+    # One local player (a controller) leaving, without dropping the whole socket.
+    code = rm.remove_player(sid, player_id)
     if code:
         await broadcast(code)
 
@@ -124,8 +145,11 @@ async def game_back_to_lobby(sid):
 
 
 @sio.on("player:action")
-async def player_action(sid, action):
-    code = rm.handle_player_action(sid, action)
+async def player_action(sid, action, player_id=None):
+    # player_id is the acting local player. Phones (one player per socket) may
+    # omit it; the TV passes the controller's id so the server can attribute the
+    # action and reject ids the socket doesn't own.
+    code = rm.handle_player_action(sid, player_id, action)
     if code:
         await broadcast(code)
 

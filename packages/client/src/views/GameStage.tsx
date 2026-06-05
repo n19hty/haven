@@ -1,18 +1,19 @@
 import React from "react";
 import { RoomState, Player, PlayerAction } from "@haven/shared";
 import { SkyBackground } from "../components/SkyBackground";
-import { getGameTVComponent } from "../games/registry";
+import { getGameTVComponent, ControllerInput } from "../games/registry";
 
 interface Props {
   roomState: RoomState;
   myPlayer: Player;
-  onAction: (action: PlayerAction) => void;
+  onAction: (action: PlayerAction, playerId?: string) => void;
   onRematch: () => void;
   onBackToLobby: () => void;
+  controllerInput?: ControllerInput;
 }
 
 /** The TV surface while a game is in progress or showing results. */
-export function GameStage({ roomState, myPlayer, onAction, onRematch, onBackToLobby }: Props) {
+export function GameStage({ roomState, myPlayer, onAction, onRematch, onBackToLobby, controllerInput }: Props) {
   const { room, gameState, scores } = roomState;
   const TVComponent = room.gameId ? getGameTVComponent(room.gameId) : null;
   const isResults = room.phase === "results";
@@ -62,6 +63,7 @@ export function GameStage({ roomState, myPlayer, onAction, onRematch, onBackToLo
             scores={scores}
             myPlayer={myPlayer}
             onAction={onAction}
+            controllerInput={controllerInput}
           />
         ) : (
           <div className="nunito" style={{ color: "var(--text-dim)" }}>

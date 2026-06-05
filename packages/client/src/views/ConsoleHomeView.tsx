@@ -119,6 +119,9 @@ export function ConsoleHomeView({
   const isMobile = w < 900;
   const [time, setTime]     = useState(new Date());
   const [uptime, setUptime] = useState(0);
+  // The TV usually loads via localhost, so ask the server for the LAN address
+  // the phone QR should point at (never localhost).
+  const [netBase, setNetBase] = useState<string | null>(null);
 
   useEffect(() => {
     const c = setInterval(() => setTime(new Date()), 1000);
@@ -126,10 +129,20 @@ export function ConsoleHomeView({
     return () => { clearInterval(c); clearInterval(u); };
   }, []);
 
+  useEffect(() => {
+    fetch("/api/server-info")
+      .then((r) => r.json())
+      .then((info) => { if (info?.host) setNetBase(`http://${info.host}:${info.port}`); })
+      .catch(() => {});
+  }, []);
+
   const timeStr    = time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
   const dateStr    = time.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
-  const joinUrl    = `${window.location.origin}?join=${room.code}`;
-  const netAddr    = `${window.location.hostname}${window.location.port && !["80","443"].includes(window.location.port) ? `:${window.location.port}` : ""}`;
+  // Prefer the server-reported LAN base so the QR is always phone-reachable;
+  // fall back to the page origin only until /api/server-info resolves.
+  const base       = netBase ?? window.location.origin;
+  const joinUrl    = `${base}?join=${room.code}`;
+  const netAddr    = base.replace(/^https?:\/\//, "");
   const sessionStr = `${String(Math.floor(uptime/60)).padStart(2,"0")}:${String(uptime%60).padStart(2,"0")}`;
 
   return (

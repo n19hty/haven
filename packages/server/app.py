@@ -14,6 +14,7 @@ In development the client runs under Vite on :3000 and proxies /api and
 from __future__ import annotations
 
 import os
+import socket
 from pathlib import Path
 
 import socketio
@@ -24,6 +25,20 @@ import room_manager as rm
 from game_loader import list_games, load_games
 
 load_games()
+
+
+def _lan_ip() -> str:
+    """Best-effort LAN IP of this machine. Opens a UDP socket toward a public
+    address (no packets are actually sent) so the OS picks the outbound
+    interface — more reliable than gethostbyname on multi-homed hosts."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
 
 # ── Socket.IO ──────────────────────────────────────────────────────────────────
 # socketio_path defaults to "socket.io", matching the client's io(..., {path:"/socket.io"}).
@@ -36,6 +51,13 @@ api = FastAPI()
 @api.get("/api/games")
 async def get_games():
     return list_games()
+
+
+@api.get("/api/server-info")
+async def server_info():
+    # The TV often loads the app via localhost, so it can't build a phone-reachable
+    # join URL on its own. Report the LAN address the client should advertise.
+    return {"host": _lan_ip(), "port": int(os.environ.get("PORT", "3001"))}
 
 
 # Serve the built client in production. packages/client/dist is created by

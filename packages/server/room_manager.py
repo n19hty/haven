@@ -25,8 +25,8 @@ from typing import Any, Optional
 
 from game_loader import GamePlugin, get_game
 
-# Mirrors AVATAR_COLORS in packages/shared/src/index.ts and the COLORS list in
-# packages/client/src/hooks/useProfiles.ts — keep all three in sync.
+# Mirrors AVATAR_COLORS in packages/shared/src/index.ts — keep the two in sync.
+# (useProfiles.ts COLORS is a separate profile palette, not this list.)
 AVATAR_COLORS = [
     "#e74c3c", "#e67e22", "#f1c40f", "#2ecc71",
     "#1abc9c", "#3498db", "#9b59b6", "#e91e63",

@@ -134,4 +134,5 @@ cage -- "$CHROMIUM" \
   --noerrdialogs \
   --disable-infobars \
   --disable-session-crashed-bubble \
-  "http://localhost:$PORT/?debug=1" || true
+  "http://localhost:$PORT" || true
+# (Add ?debug=1 to the URL above to show the raw gamepad overlay.)

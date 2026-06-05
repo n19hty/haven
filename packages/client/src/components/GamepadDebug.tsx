@@ -21,8 +21,12 @@ export function GamepadDebug() {
         const pressed = gp.buttons
           .map((b, i) => (b.pressed || b.value > 0.5 ? i : -1))
           .filter((i) => i >= 0);
-        const axes = gp.axes.map((a) => a.toFixed(2)).join(", ");
-        out.push(`#${gp.index} ${gp.id.slice(0, 28)}\n   buttons[${pressed.join(",")}]  axes[${axes}]`);
+        // Show each axis with its index so the d-pad axis is easy to identify.
+        const axes = gp.axes.map((a, i) => `a${i}:${a.toFixed(2)}`).join("  ");
+        out.push(
+          `#${gp.index} [${gp.mapping || "non-standard"}] ${gp.id.slice(0, 22)}\n` +
+            `  btn[${pressed.join(",")}]\n  ${axes}`,
+        );
       }
       setLines(out.length ? out.join("\n") : "no pad seen — press a button on a controller");
       raf = requestAnimationFrame(loop);

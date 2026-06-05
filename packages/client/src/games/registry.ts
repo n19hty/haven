@@ -9,7 +9,8 @@ export type ControllerControl =
   | "right"
   | "confirm"
   | "back"
-  | "start";
+  | "start"
+  | "home"; // Select(8) + Start(9) chord — the system / back-to-home button
 
 /** An edge-detected control press, already attributed to a local player. */
 export interface ControllerEvent {

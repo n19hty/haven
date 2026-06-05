@@ -28,6 +28,15 @@ describe("activeControls", () => {
     expect([...activeControls(pad([], [0, 1]))]).toContain("down");
   });
 
+  it("emits home only when Select(8) + Start(9) are held together", () => {
+    const only8 = Array(16).fill(0); only8[8] = 1;
+    const only9 = Array(16).fill(0); only9[9] = 1;
+    const both = Array(16).fill(0); both[8] = 1; both[9] = 1;
+    expect(activeControls(pad(only8)).has("home")).toBe(false);
+    expect(activeControls(pad(only9)).has("home")).toBe(false);
+    expect(activeControls(pad(both)).has("home")).toBe(true);
+  });
+
   it("ignores small (deadzone) axis movement", () => {
     expect(activeControls(pad([], [0.2, -0.2])).size).toBe(0);
   });

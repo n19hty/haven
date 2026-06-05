@@ -17,13 +17,18 @@ import { ControllerControl } from "../games/registry";
 const BUTTON_CONTROLS: Record<number, ControllerControl> = {
   0: "confirm",
   1: "confirm",
-  9: "start",
   12: "up",
   13: "down",
   14: "left",
   15: "right",
 };
+// Home is a chord: Select(8) + Start(9) held together (classic console exit combo).
+const HOME_CHORD = [8, 9];
 const AXIS_THRESHOLD = 0.5;
+
+function isDown(b?: { pressed: boolean; value: number }): boolean {
+  return !!b && (b.pressed || b.value > 0.5);
+}
 
 interface GamepadSnapshot {
   buttons: ReadonlyArray<{ pressed: boolean; value: number }>;
@@ -37,6 +42,8 @@ export function activeControls(gp: GamepadSnapshot): Set<ControllerControl> {
     const c = BUTTON_CONTROLS[i];
     if (c && (b.pressed || b.value > 0.5)) s.add(c);
   });
+  // Home = Select(8) + Start(9) pressed together.
+  if (HOME_CHORD.every((i) => isDown(gp.buttons[i]))) s.add("home");
   const x = gp.axes[0];
   const y = gp.axes[1];
   if (typeof x === "number") {

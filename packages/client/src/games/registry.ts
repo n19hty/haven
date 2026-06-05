@@ -1,14 +1,39 @@
 import React from "react";
 import { Player, PlayerAction } from "@haven/shared";
 
+// ─── Controller input (Bluetooth gamepads on the TV) ─────────────────────────
+export type ControllerControl =
+  | "up"
+  | "down"
+  | "left"
+  | "right"
+  | "confirm"
+  | "back"
+  | "start"
+  | "home"; // Select(8) + Start(9) chord — the system / back-to-home button
+
+/** An edge-detected control press, already attributed to a local player. */
+export interface ControllerEvent {
+  playerId: string;
+  control: ControllerControl;
+}
+
+/** Subscribe to controller events; returns an unsubscribe function. */
+export type ControllerInput = (handler: (e: ControllerEvent) => void) => () => void;
+
 export interface TVComponentProps {
   gameState: unknown;
   players: Player[];
   scores: Record<string, number>;
   /** The player sitting at the console (the host is also a player). */
   myPlayer: Player;
-  /** Send a game action to the server (the TV can be played on a touchscreen). */
-  onAction: (action: PlayerAction) => void;
+  /**
+   * Send a game action. playerId names the acting local player; omit it to act
+   * as the console's own player (the backward-compatible default).
+   */
+  onAction: (action: PlayerAction, playerId?: string) => void;
+  /** Subscribe to Bluetooth-controller input, if any controllers are present. */
+  controllerInput?: ControllerInput;
 }
 
 export interface ControllerComponentProps {
@@ -16,7 +41,7 @@ export interface ControllerComponentProps {
   myPlayer: Player;
   players: Player[];
   scores: Record<string, number>;
-  onAction: (action: PlayerAction) => void;
+  onAction: (action: PlayerAction, playerId?: string) => void;
 }
 
 export type TVComponent         = React.ComponentType<TVComponentProps>;

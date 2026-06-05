@@ -62,8 +62,12 @@ cd "$HAVEN_DIR"
 # arm64 CPU npm then fails to install the matching arm64 binary (npm/cli#4828).
 # Resolve fresh from package.json instead — and ignore the lockfile so we don't
 # leave it dirty (which would break the `git pull --ff-only` update path).
+#
+# --legacy-peer-deps: the Pi's Node 20 ships npm 10, which errors on loose peer
+# deps (e.g. vitest's optional peers) that npm 9 resolves silently. The tree is
+# healthy (vite dedupes cleanly); this just stops npm 10 from refusing to build.
 rm -rf node_modules packages/*/node_modules
-npm install --no-package-lock
+npm install --no-package-lock --legacy-peer-deps
 
 echo "[4/7] Building the client (this can take a few minutes on a Pi)..."
 ensure_swap

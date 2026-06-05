@@ -1,21 +1,48 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { RoomState, Player, PlayerAction } from "@haven/shared";
 import { SkyBackground } from "../components/SkyBackground";
-import { getGameTVComponent } from "../games/registry";
+import { getGameTVComponent, ControllerInput } from "../games/registry";
 
 interface Props {
   roomState: RoomState;
   myPlayer: Player;
-  onAction: (action: PlayerAction) => void;
+  onAction: (action: PlayerAction, playerId?: string) => void;
   onRematch: () => void;
   onBackToLobby: () => void;
+  controllerInput?: ControllerInput;
 }
 
 /** The TV surface while a game is in progress or showing results. */
-export function GameStage({ roomState, myPlayer, onAction, onRematch, onBackToLobby }: Props) {
+export function GameStage({ roomState, myPlayer, onAction, onRematch, onBackToLobby, controllerInput }: Props) {
   const { room, gameState, scores } = roomState;
   const TVComponent = room.gameId ? getGameTVComponent(room.gameId) : null;
   const isResults = room.phase === "results";
+
+  // ── Controller handling for the host (results nav + in-game escape) ───────
+  const [resultsFocus, setResultsFocus] = useState(0); // 0 = play again, 1 = back to lobby
+  const focusRef = useRef(0); focusRef.current = resultsFocus;
+  const phaseRef = useRef(room.phase); phaseRef.current = room.phase;
+  const isHostRef = useRef(myPlayer.isHost); isHostRef.current = myPlayer.isHost;
+  const myIdRef = useRef(myPlayer.id); myIdRef.current = myPlayer.id;
+  const cbRef = useRef({ onRematch, onBackToLobby });
+  cbRef.current = { onRematch, onBackToLobby };
+
+  useEffect(() => {
+    if (!controllerInput) return;
+    return controllerInput((e) => {
+      // Only the console/host pad drives these menus.
+      if (!isHostRef.current || e.playerId !== myIdRef.current) return;
+      // Home (Select+Start) always returns to the lobby.
+      if (e.control === "home") { cbRef.current.onBackToLobby(); return; }
+      if (phaseRef.current === "results") {
+        if (e.control === "left" || e.control === "up") setResultsFocus(0);
+        else if (e.control === "right" || e.control === "down") setResultsFocus(1);
+        else if (e.control === "confirm") {
+          (focusRef.current === 0 ? cbRef.current.onRematch : cbRef.current.onBackToLobby)();
+        }
+      }
+    });
+  }, [controllerInput]);
 
   return (
     <div style={{
@@ -62,6 +89,7 @@ export function GameStage({ roomState, myPlayer, onAction, onRematch, onBackToLo
             scores={scores}
             myPlayer={myPlayer}
             onAction={onAction}
+            controllerInput={controllerInput}
           />
         ) : (
           <div className="nunito" style={{ color: "var(--text-dim)" }}>
@@ -77,10 +105,17 @@ export function GameStage({ roomState, myPlayer, onAction, onRematch, onBackToLo
           display: "flex", gap: 14,
         }}>
           {myPlayer.isHost ? (
-            <>
-              <button onClick={onRematch} className="nunito" style={btn(true)}>Play again</button>
-              <button onClick={onBackToLobby} className="nunito" style={btn(false)}>Back to lobby</button>
-            </>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+              <div style={{ display: "flex", gap: 14 }}>
+                <button onClick={onRematch} className="nunito" style={btn(true, !!controllerInput && resultsFocus === 0)}>Play again</button>
+                <button onClick={onBackToLobby} className="nunito" style={btn(false, !!controllerInput && resultsFocus === 1)}>Back to lobby</button>
+              </div>
+              {controllerInput && (
+                <div className="nunito" style={{ fontSize: 12, color: "var(--text-dim)" }}>
+                  D-pad to choose · A to select
+                </div>
+              )}
+            </div>
           ) : (
             <div className="nunito" style={{ fontSize: 14, color: "var(--text-dim)" }}>
               Waiting for the host…
@@ -88,11 +123,20 @@ export function GameStage({ roomState, myPlayer, onAction, onRematch, onBackToLo
           )}
         </div>
       )}
+
+      {room.phase === "playing" && controllerInput && myPlayer.isHost && (
+        <div className="nunito" style={{
+          position: "absolute", bottom: 16, zIndex: 1,
+          fontSize: 12, fontWeight: 700, color: "var(--text-dim)",
+        }}>
+          Home (Select + Start) → lobby
+        </div>
+      )}
     </div>
   );
 }
 
-function btn(primary: boolean): React.CSSProperties {
+function btn(primary: boolean, focused = false): React.CSSProperties {
   return {
     padding: "12px 28px", borderRadius: 100, cursor: "pointer",
     fontSize: 15, fontWeight: 800,
@@ -100,5 +144,7 @@ function btn(primary: boolean): React.CSSProperties {
     background: primary ? "var(--sky)" : "rgba(255,255,255,0.05)",
     color: primary ? "#04091C" : "var(--text)",
     boxShadow: primary ? "0 0 24px rgba(56,189,248,0.4)" : "none",
+    outline: focused ? "3px solid var(--sky-light, #7dd3fc)" : "none",
+    outlineOffset: 3,
   };
 }

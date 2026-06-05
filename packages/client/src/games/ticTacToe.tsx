@@ -1,10 +1,29 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Player } from "@haven/shared";
 import {
   registerGame,
   TVComponentProps,
   ControllerComponentProps,
+  ControllerControl,
 } from "./registry";
+
+/** Move a 3×3 cursor (0..8) by a d-pad direction, respecting grid edges. */
+export function moveCursor(index: number, control: ControllerControl): number {
+  const row = Math.floor(index / 3);
+  const col = index % 3;
+  switch (control) {
+    case "up":
+      return row > 0 ? index - 3 : index;
+    case "down":
+      return row < 2 ? index + 3 : index;
+    case "left":
+      return col > 0 ? index - 1 : index;
+    case "right":
+      return col < 2 ? index + 1 : index;
+    default:
+      return index;
+  }
+}
 
 // Mirror of the server-side state in games/tic-tac-toe/server.py
 interface TTTState {
@@ -27,6 +46,7 @@ function Board({
   interactive,
   onCell,
   cellSize,
+  cursorIndex,
 }: {
   state: TTTState;
   players: Player[];
@@ -34,9 +54,11 @@ function Board({
   interactive: boolean;
   onCell: (index: number) => void;
   cellSize: number;
+  cursorIndex?: number | null;
 }) {
   const myTurn = state.turn === myId && state.line === null;
   const winningSet = new Set(state.line ?? []);
+  const turnColor = playerById(players, state.turn)?.avatarColor ?? "var(--sky)";
 
   return (
     <div
@@ -54,6 +76,7 @@ function Board({
         const empty = owner === null;
         const playable = interactive && myTurn && empty;
         const inWin = winningSet.has(i);
+        const isCursor = cursorIndex === i && state.line === null;
 
         return (
           <button
@@ -65,6 +88,8 @@ function Board({
               width: cellSize,
               height: cellSize,
               borderRadius: 18,
+              outline: isCursor ? `3px solid ${turnColor}` : "none",
+              outlineOffset: 2,
               border: inWin
                 ? `2px solid ${color}`
                 : "1px solid rgba(255,255,255,0.1)",
@@ -133,8 +158,36 @@ function MarkLegend({ state, players }: { state: TTTState; players: Player[] }) 
   );
 }
 
-function TicTacToeTV({ gameState, players, myPlayer, onAction }: TVComponentProps) {
+function TicTacToeTV({ gameState, players, myPlayer, onAction, controllerInput }: TVComponentProps) {
   const state = gameState as TTTState;
+  const [cursor, setCursor] = useState(4);
+
+  // Refs so the (stable) controller subscription always reads fresh values
+  // without re-subscribing every render.
+  const cursorRef = useRef(cursor);
+  cursorRef.current = cursor;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const onActionRef = useRef(onAction);
+  onActionRef.current = onAction;
+
+  useEffect(() => {
+    if (!controllerInput) return;
+    return controllerInput((e) => {
+      const s = stateRef.current;
+      // Only the player whose turn it is drives the cursor / places a mark.
+      if (e.playerId !== s.turn || s.line !== null) return;
+      if (e.control === "confirm") {
+        const idx = cursorRef.current;
+        if (s.board[idx] === null) {
+          onActionRef.current({ type: "place", payload: { index: idx } }, e.playerId);
+        }
+      } else {
+        setCursor((c) => moveCursor(c, e.control));
+      }
+    });
+  }, [controllerInput]);
+
   return (
     <div
       style={{
@@ -150,8 +203,9 @@ function TicTacToeTV({ gameState, players, myPlayer, onAction }: TVComponentProp
         players={players}
         myId={myPlayer.id}
         interactive
-        onCell={(index) => onAction({ type: "place", payload: { index } })}
+        onCell={(index) => onAction({ type: "place", payload: { index } }, myPlayer.id)}
         cellSize={120}
+        cursorIndex={controllerInput ? cursor : null}
       />
       <div className="nunito" style={{ fontSize: 20, fontWeight: 800, color: "var(--text)" }}>
         {statusText(state, players, myPlayer.id)}

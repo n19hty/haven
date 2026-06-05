@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { RoomState, Player, GameMeta } from "@haven/shared";
 import { Character } from "../components/Character";
 import { SkyBackground } from "../components/SkyBackground";
 import { Profile } from "../hooks/useProfiles";
+import { ControllerInput } from "../games/registry";
 
 interface Props {
   roomState: RoomState;
@@ -12,6 +13,8 @@ interface Props {
   games?: GameMeta[];
   isHost?: boolean;
   onLaunch?: (gameId: string) => void;
+  controllerInput?: ControllerInput;
+  controllerCount?: number;
 }
 
 function useViewport() {
@@ -84,13 +87,41 @@ function PlayerSlot({ player, index, isMe, profile }: {
   );
 }
 
-export function ConsoleHomeView({ roomState, myPlayer, profile, games = [], isHost = false, onLaunch }: Props) {
+export function ConsoleHomeView({
+  roomState, myPlayer, profile, games = [], isHost = false, onLaunch,
+  controllerInput, controllerCount = 0,
+}: Props) {
   const { room } = roomState;
   const canLaunch = isHost && room.players.length >= 2;
+
+  // ── Controller navigation of the game shelf ──────────────────────────────
+  const [selected, setSelected] = useState(0);
+  const selectedRef = useRef(0); selectedRef.current = selected;
+  const gamesRef = useRef(games); gamesRef.current = games;
+  const canLaunchRef = useRef(canLaunch); canLaunchRef.current = canLaunch;
+  const onLaunchRef = useRef(onLaunch); onLaunchRef.current = onLaunch;
+
+  useEffect(() => {
+    if (!controllerInput) return;
+    return controllerInput((e) => {
+      const n = gamesRef.current.length;
+      if (n === 0) return;
+      if (e.control === "left") setSelected((s) => Math.max(0, s - 1));
+      else if (e.control === "right") setSelected((s) => Math.min(n - 1, s + 1));
+      else if (e.control === "confirm") {
+        // Only the host can actually start; the server enforces this too.
+        if (canLaunchRef.current) onLaunchRef.current?.(gamesRef.current[selectedRef.current]?.id);
+      }
+    });
+  }, [controllerInput]);
+
   const { w }    = useViewport();
   const isMobile = w < 900;
   const [time, setTime]     = useState(new Date());
   const [uptime, setUptime] = useState(0);
+  // The TV usually loads via localhost, so ask the server for the LAN address
+  // the phone QR should point at (never localhost).
+  const [netBase, setNetBase] = useState<string | null>(null);
 
   useEffect(() => {
     const c = setInterval(() => setTime(new Date()), 1000);
@@ -98,10 +129,20 @@ export function ConsoleHomeView({ roomState, myPlayer, profile, games = [], isHo
     return () => { clearInterval(c); clearInterval(u); };
   }, []);
 
+  useEffect(() => {
+    fetch("/api/server-info")
+      .then((r) => r.json())
+      .then((info) => { if (info?.host) setNetBase(`http://${info.host}:${info.port}`); })
+      .catch(() => {});
+  }, []);
+
   const timeStr    = time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
   const dateStr    = time.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
-  const joinUrl    = `${window.location.origin}?join=${room.code}`;
-  const netAddr    = `${window.location.hostname}${window.location.port && !["80","443"].includes(window.location.port) ? `:${window.location.port}` : ""}`;
+  // Prefer the server-reported LAN base so the QR is always phone-reachable;
+  // fall back to the page origin only until /api/server-info resolves.
+  const base       = netBase ?? window.location.origin;
+  const joinUrl    = `${base}?join=${room.code}`;
+  const netAddr    = base.replace(/^https?:\/\//, "");
   const sessionStr = `${String(Math.floor(uptime/60)).padStart(2,"0")}:${String(uptime%60).padStart(2,"0")}`;
 
   return (
@@ -172,6 +213,17 @@ export function ConsoleHomeView({ roomState, myPlayer, profile, games = [], isHo
               </span>
             )}
           </div>
+          {controllerCount > 0 && (
+            <div className="nunito" title="Bluetooth controllers connected" style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "4px 12px", borderRadius: 100,
+              background: "rgba(52,211,153,0.12)",
+              border: "1px solid rgba(52,211,153,0.4)",
+              fontSize: 13, fontWeight: 800, color: "#34D399",
+            }}>
+              <span style={{ fontSize: 14 }}>🎮</span>×{controllerCount}
+            </div>
+          )}
           <span className="nunito" style={{
             fontSize: 14, fontWeight: 800, color: "var(--text)",
             fontVariantNumeric: "tabular-nums",
@@ -314,12 +366,18 @@ export function ConsoleHomeView({ roomState, myPlayer, profile, games = [], isHo
                 </span>
                 <div style={{ flex: 1, height: 1, background: "linear-gradient(90deg, rgba(255,255,255,0.15), transparent)" }} />
                 <span className="nunito" style={{ fontSize: 11, color: "var(--text-dim)" }}>
-                  {canLaunch ? "Tap to play" : isHost ? "Need 2 players" : "Host picks"}
+                  {!canLaunch
+                    ? (isHost ? "Need 2 players" : "Host picks")
+                    : controllerInput
+                    ? "← → select · A to play"
+                    : "Tap to play"}
                 </span>
               </div>
 
               <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
-                {games.map((g) => (
+                {games.map((g, i) => {
+                  const isSel = !!controllerInput && i === selected;
+                  return (
                   <button
                     key={g.id}
                     onClick={() => canLaunch && onLaunch?.(g.id)}
@@ -329,7 +387,8 @@ export function ConsoleHomeView({ roomState, myPlayer, profile, games = [], isHo
                       width: isMobile ? 124 : 152, height: isMobile ? 96 : 118,
                       borderRadius: 16, flexShrink: 0,
                       background: "linear-gradient(145deg, rgba(56,189,248,0.14) 0%, rgba(8,18,52,0.7) 100%)",
-                      border: "1px solid rgba(56,189,248,0.25)",
+                      border: isSel ? "2px solid var(--sky)" : "1px solid rgba(56,189,248,0.25)",
+                      boxShadow: isSel ? "0 0 24px rgba(56,189,248,0.45)" : "none",
                       display: "flex", flexDirection: "column",
                       alignItems: "center", justifyContent: "center", gap: 8,
                       cursor: canLaunch ? "pointer" : "default",
@@ -345,7 +404,8 @@ export function ConsoleHomeView({ roomState, myPlayer, profile, games = [], isHo
                       {g.minPlayers === g.maxPlayers ? `${g.minPlayers} players` : `${g.minPlayers}–${g.maxPlayers} players`}
                     </span>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -493,6 +553,14 @@ export function ConsoleHomeView({ roomState, myPlayer, profile, games = [], isHo
                 {room.players.length} / 4
               </span>
             </div>
+            {controllerCount > 0 && room.players.length < 4 && (
+              <div className="nunito" style={{
+                fontSize: 11, color: "var(--text-dim)", marginBottom: 12,
+                display: "flex", alignItems: "center", gap: 6,
+              }}>
+                <span>🎮</span> Press a button on another controller to add a player
+              </div>
+            )}
             <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
               {[0, 1, 2, 3].map((i) => (
                 <PlayerSlot

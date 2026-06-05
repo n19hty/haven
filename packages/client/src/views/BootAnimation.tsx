@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { SkyBackground } from "../components/SkyBackground";
+import { useGamepads } from "../hooks/useGamepads";
 
 interface Props { onComplete: () => void; }
 type Phase = "logo" | "text" | "ready" | "out";
@@ -24,6 +25,9 @@ export function BootAnimation({ onComplete }: Props) {
     if (phase === "ready") window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [phase]); // eslint-disable-line
+
+  // A controller button counts as "press anywhere to enter".
+  useGamepads(() => advance());
 
   return (
     <div

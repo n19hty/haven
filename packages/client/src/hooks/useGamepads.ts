@@ -26,6 +26,11 @@ const BUTTON_CONTROLS: Record<number, ControllerControl> = {
 const HOME_CHORD = [8, 9];
 const AXIS_THRESHOLD = 0.5;
 
+// Directions repeat while held (console-style); other controls fire once.
+const REPEAT_CONTROLS = new Set<ControllerControl>(["up", "down", "left", "right"]);
+const REPEAT_DELAY = 380; // ms before a held direction starts repeating
+const REPEAT_INTERVAL = 130; // ms between repeats thereafter
+
 function isDown(b?: { pressed: boolean; value: number }): boolean {
   return !!b && (b.pressed || b.value > 0.5);
 }
@@ -85,16 +90,41 @@ export function useGamepads(onEvent: (e: GamepadFrameEvent) => void) {
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.getGamepads) return;
     const prev = new Map<number, Set<ControllerControl>>();
+    // `${index}:${control}` -> timestamp of the next allowed repeat.
+    const nextRepeat = new Map<string, number>();
     let raf = 0;
 
     const loop = () => {
+      const now = performance.now();
       for (const gp of navigator.getGamepads()) {
         if (!gp) continue;
         const cur = activeControls(gp);
         const before = prev.get(gp.index) ?? new Set<ControllerControl>();
-        for (const control of risingEdges(before, cur)) {
-          onEventRef.current({ index: gp.index, control });
-        }
+
+        cur.forEach((control) => {
+          const key = `${gp.index}:${control}`;
+          if (!before.has(control)) {
+            // Rising edge — fire immediately.
+            onEventRef.current({ index: gp.index, control });
+            if (REPEAT_CONTROLS.has(control)) nextRepeat.set(key, now + REPEAT_DELAY);
+          } else if (REPEAT_CONTROLS.has(control)) {
+            // Held — repeat on the timer (console-style menu scroll).
+            const due = nextRepeat.get(key);
+            if (due !== undefined && now >= due) {
+              onEventRef.current({ index: gp.index, control });
+              nextRepeat.set(key, now + REPEAT_INTERVAL);
+            }
+          }
+        });
+
+        // Forget repeat timers for controls this pad released.
+        nextRepeat.forEach((_, key) => {
+          const [idx, control] = key.split(":");
+          if (Number(idx) === gp.index && !cur.has(control as ControllerControl)) {
+            nextRepeat.delete(key);
+          }
+        });
+
         prev.set(gp.index, cur);
       }
       raf = requestAnimationFrame(loop);

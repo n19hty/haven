@@ -209,12 +209,18 @@
       if (audioCtx.state === "suspended") audioCtx.resume();
       var osc = audioCtx.createOscillator();
       var gain = audioCtx.createGain();
+      // Longer + louder than a blip so it's unambiguous on a TV across the room.
+      // The on-page "pass" only means WebAudio ran — your EARS are the real test.
+      var t = audioCtx.currentTime;
       osc.frequency.value = 660;
-      gain.gain.value = 0.15;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.4, t + 0.02);
+      gain.gain.setValueAtTime(0.4, t + 0.5);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
       osc.connect(gain); gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.15);
-      setCheck("c-audio", "pass", "tone played — did you hear it?");
+      osc.start(t);
+      osc.stop(t + 0.72);
+      setCheck("c-audio", "pass", "tone playing — do you HEAR it through HDMI?");
     } catch (e) {
       setCheck("c-audio", "fail", String(e));
     }

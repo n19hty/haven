@@ -30,16 +30,32 @@ desktop" target condition:
    bluetoothctl
    # scan on  → wait for the controller (put it in pairing mode) → pair <MAC> → trust <MAC> → connect <MAC> → quit
    ```
-3. Run the spike (first time, install deps):
+3. Run the spike (first time, install deps; `--stop-dm` frees the GPU — see gotcha
+   below):
    ```bash
    cd ~/haven
-   bash spike/run-spike.sh --install
+   bash spike/run-spike.sh --install --stop-dm
    ```
-   Subsequent runs: `bash spike/run-spike.sh`.
+   Subsequent runs: `bash spike/run-spike.sh --stop-dm`.
 4. cage launches full-screen Chromium on the test page. **Press buttons on the
    controller.** Read the four checks off the TV.
-5. Quit cage (switch VTs with Ctrl+Alt+F1, or kill from another TTY). The OS-side
-   facts were written to `spike/results-<timestamp>.txt`.
+5. Quit cage: switch to another console (**Ctrl+Alt+F2**, log in) and
+   `pkill -f cage`. The display manager restarts automatically (it was stopped
+   with `--stop-dm`), and the verdict template + OS facts are in
+   `spike/results-<timestamp>.txt`.
+
+### Gotchas (learned running this on a Pi 4/5)
+- **`cage` fails with `EGL_BAD_PARAMETER` and drops you back to the shell** → the
+  desktop is still running and holds the GPU (DRM master). Run from a TTY with the
+  display manager stopped. `--stop-dm` does this for you (and restarts it on exit).
+  Only use `--stop-dm` from a real TTY, never the desktop's own terminal.
+- **GPU shows green as `ANGLE (Broadcom, V3D ...)`** → that IS the hardware path.
+  Good.
+- **The page's AUDIO check goes green but you hear nothing** → the green only means
+  WebAudio didn't throw. OS audio (PipeWire/`speaker-test`) and *browser* audio
+  (Chromium → pipewire-pulse) are separate. Confirm the OS side with
+  `wpctl status` / `speaker-test`; browser-audio routing is a PR2 boot-config
+  detail, not a gate failure.
 
 Quick smoke test from the desktop instead: open a terminal and run the same
 command. It's less faithful (a user session already exists) but confirms the

@@ -134,4 +134,4 @@ cage -- "$CHROMIUM" \
   --noerrdialogs \
   --disable-infobars \
   --disable-session-crashed-bubble \
-  "http://localhost:$PORT" || true
+  "http://localhost:$PORT/?debug=1" || true

@@ -3,6 +3,7 @@ import { useProfiles, Profile } from "../hooks/useProfiles";
 import { Character, CharacterConfig, DEFAULT_CHARACTER } from "../components/Character";
 import { CharacterCreator } from "../components/CharacterCreator";
 import { SkyBackground } from "../components/SkyBackground";
+import { useGamepads } from "../hooks/useGamepads";
 
 interface Props {
   onLogin: (profile: Profile) => void;
@@ -41,9 +42,25 @@ export function LoginScreen({ onLogin }: Props) {
   }
 
   function handleContinue() {
-    const p = profiles.find((x) => x.id === selected);
+    const p = profiles.find((x) => x.id === selected) ?? profiles[0];
     if (p) onLogin(p);
   }
+
+  // Controller navigation of the profile picker: d-pad selects, A continues.
+  useGamepads((e) => {
+    if (screen !== "pick" || managing || profiles.length === 0) return;
+    if (e.control === "confirm") {
+      handleContinue();
+      return;
+    }
+    if (e.control === "left" || e.control === "right") {
+      const idx = Math.max(0, profiles.findIndex((p) => p.id === selected));
+      const next = e.control === "left"
+        ? Math.max(0, idx - 1)
+        : Math.min(profiles.length - 1, idx + 1);
+      setSelected(profiles[next].id);
+    }
+  });
 
   // ── CREATE / EDIT screen ────────────────────────────────────────────────────
   if (screen === "create" || screen === "edit") {

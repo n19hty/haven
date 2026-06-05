@@ -9,10 +9,14 @@ import { ControllerControl } from "../games/registry";
 // is the whole reason we don't flood the socket: one event per real press, not
 // 60/sec while a button is held. The two pure functions below are unit-tested.
 
-// Standard Gamepad mapping (https://w3c.github.io/gamepad/#remapping).
+// Button → control. Standard mapping (https://w3c.github.io/gamepad/#remapping)
+// puts the accept button at index 0, but many Bluetooth pads report a
+// non-standard mapping (gamepad.mapping === "") with the accept button at index
+// 1. We treat BOTH primary face buttons as "confirm" — we don't bind a separate
+// cancel yet, so there's no ambiguity, and it works across both mappings.
 const BUTTON_CONTROLS: Record<number, ControllerControl> = {
-  0: "confirm", // A / cross
-  1: "back", // B / circle
+  0: "confirm",
+  1: "confirm",
   9: "start",
   12: "up",
   13: "down",

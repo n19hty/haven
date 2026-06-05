@@ -16,7 +16,14 @@ describe("activeControls", () => {
     expect(s.has("down")).toBe(false);
   });
 
-  it("maps axis movement past the threshold", () => {
+  it("treats both primary face buttons (0 and 1) as confirm", () => {
+    const b0 = Array(16).fill(0); b0[0] = 1;
+    const b1 = Array(16).fill(0); b1[1] = 1;
+    expect(activeControls(pad(b0)).has("confirm")).toBe(true);
+    expect(activeControls(pad(b1)).has("confirm")).toBe(true); // non-standard pads
+  });
+
+  it("maps axis movement past the threshold (d-pad-as-axis pads too)", () => {
     expect([...activeControls(pad([], [-1, 0]))]).toContain("left");
     expect([...activeControls(pad([], [0, 1]))]).toContain("down");
   });

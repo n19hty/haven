@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  Haven PR1 spike — gamepad-in-cage check.
+
+  This page is the on-TV half of the spike. It runs inside cage-Chromium on the
+  Pi and proves the load-bearing assumptions of Haven Mode BEFORE any identity /
+  pairing / boot work is built on top of them:
+
+    1. GPU         — WebGL reports a hardware renderer (V3D), not software
+                     (llvmpipe / SwiftShader). If software, Chromium isn't
+                     getting GPU acceleration under cage.
+    2. GAMEPAD     — a paired Bluetooth controller appears in
+                     navigator.getGamepads() AND its buttons/axes register live.
+                     This is the whole premise: controllers read by the TV
+                     browser via the Gamepad API. If this fails, primary input
+                     is dead and the rest of Haven Mode is moot.
+    3. AUDIO       — a button press plays a tone through WebAudio (HDMI). Easy to
+                     lose when the desktop session is gone.
+
+  Chrome only exposes a gamepad AFTER it sends input (privacy), so the test asks
+  you to press a button. Read the verdict off the TV; the runner script captures
+  the OS-side facts (seat, session bus, sinks) separately.
+-->
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Haven Spike — Gamepad in cage</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: #0b1020; color: #e8eefc;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      padding: 4vh 4vw;
+    }
+    h1 { font-size: 2.4rem; margin: 0 0 0.2em; }
+    .sub { color: #8aa0c8; margin: 0 0 1.2em; font-size: 1.1rem; }
+    .checks { display: grid; gap: 14px; margin-bottom: 1.5em; }
+    .check {
+      display: flex; align-items: center; gap: 16px;
+      background: #131a30; border: 1px solid #223; border-radius: 12px;
+      padding: 16px 20px; font-size: 1.5rem; font-weight: 600;
+    }
+    .badge {
+      flex: 0 0 auto; width: 1.8em; height: 1.8em; border-radius: 50%;
+      display: grid; place-items: center; font-size: 1em; font-weight: 800;
+      background: #2a3350; color: #8aa0c8;
+    }
+    .check.pass  .badge { background: #1d7a47; color: #d7ffe7; }
+    .check.fail  .badge { background: #8a2030; color: #ffd7dd; }
+    .check.wait  .badge { background: #6b5d1a; color: #fff3c4; }
+    .check .label { flex: 1 1 auto; }
+    .check .detail { color: #8aa0c8; font-size: 0.95rem; font-weight: 400; text-align: right; max-width: 50%; }
+    #pads { display: grid; gap: 12px; }
+    .pad {
+      background: #0f1528; border: 1px solid #223; border-radius: 10px; padding: 12px 16px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.95rem;
+    }
+    .pad .pid { color: #9ec1ff; margin-bottom: 6px; word-break: break-all; }
+    .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+    .b {
+      min-width: 2.2em; text-align: center; padding: 4px 6px; border-radius: 6px;
+      background: #1a2240; color: #6b7ba0; font-size: 0.8rem;
+    }
+    .b.on { background: #2e7d46; color: #eaffef; }
+    .axes { margin-top: 8px; color: #8aa0c8; font-size: 0.85rem; }
+    .hint { margin-top: 1.5em; color: #6b7ba0; font-size: 1rem; }
+    code { background: #1a2240; padding: 1px 6px; border-radius: 5px; }
+  </style>
+</head>
+<body>
+  <h1>Haven PR1 — cage gamepad spike</h1>
+  <p class="sub">Press a button on a paired controller. Read the verdict below.</p>
+
+  <div class="checks">
+    <div class="check wait" id="c-gpu">
+      <div class="badge">?</div>
+      <div class="label">GPU acceleration</div>
+      <div class="detail" id="d-gpu">checking…</div>
+    </div>
+    <div class="check wait" id="c-pad">
+      <div class="badge">?</div>
+      <div class="label">Gamepad detected</div>
+      <div class="detail" id="d-pad">press any button…</div>
+    </div>
+    <div class="check wait" id="c-input">
+      <div class="badge">?</div>
+      <div class="label">Live button / axis input</div>
+      <div class="detail" id="d-input">waiting…</div>
+    </div>
+    <div class="check wait" id="c-audio">
+      <div class="badge">?</div>
+      <div class="label">Audio (press a button to test the tone)</div>
+      <div class="detail" id="d-audio">no tone yet</div>
+    </div>
+  </div>
+
+  <div id="pads"></div>
+
+  <p class="hint">
+    PASS = green GPU (a V3D / Mesa renderer, not llvmpipe or SwiftShader) and a
+    controller whose buttons light up here. If you hear the tone on a button
+    press, audio is good too. Then run <code>scripts/run-spike.sh</code> output
+    capture for the seat / session-bus facts.
+  </p>
+
+<script>
+(function () {
+  "use strict";
+
+  function setCheck(id, state, detail) {
+    var el = document.getElementById(id);
+    el.classList.remove("wait", "pass", "fail");
+    el.classList.add(state);
+    el.querySelector(".badge").textContent = state === "pass" ? "✓" : state === "fail" ? "✗" : "?";
+    if (detail != null) el.querySelector(".detail").textContent = detail;
+  }
+
+  // ── 1. GPU renderer ──────────────────────────────────────────────────────
+  // WEBGL_debug_renderer_info exposes the unmasked GPU string. Hardware paths on
+  // the Pi report a V3D / Mesa renderer; software fallback reports llvmpipe or
+  // SwiftShader — the signal that Chromium did NOT get GPU acceleration.
+  (function checkGpu() {
+    try {
+      var c = document.createElement("canvas");
+      var gl = c.getContext("webgl") || c.getContext("experimental-webgl");
+      if (!gl) { setCheck("c-gpu", "fail", "no WebGL context"); return; }
+      var ext = gl.getExtension("WEBGL_debug_renderer_info");
+      var renderer = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+      var soft = /swiftshader|llvmpipe|software|basic render/i.test(renderer || "");
+      setCheck("c-gpu", soft ? "fail" : "pass", renderer || "unknown");
+    } catch (e) {
+      setCheck("c-gpu", "fail", String(e));
+    }
+  })();
+
+  // ── 2 & 3. Gamepad detection + live input ────────────────────────────────
+  var sawPad = false;
+  var sawInput = false;
+  var padsEl = document.getElementById("pads");
+
+  window.addEventListener("gamepadconnected", function (e) {
+    sawPad = true;
+    setCheck("c-pad", "pass", e.gamepad.id);
+  });
+  window.addEventListener("gamepaddisconnected", function () {
+    // Re-evaluate on next poll; a disconnect mid-spike is itself useful data.
+  });
+
+  function poll() {
+    var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    var live = [];
+    for (var i = 0; i < pads.length; i++) if (pads[i]) live.push(pads[i]);
+
+    if (live.length && !sawPad) {
+      sawPad = true;
+      setCheck("c-pad", "pass", live[0].id);
+    }
+    if (!live.length && !sawPad) {
+      setCheck("c-pad", "wait", "press any button…");
+    }
+
+    var html = "";
+    for (var p = 0; p < live.length; p++) {
+      var gp = live[p];
+      var btns = "";
+      for (var b = 0; b < gp.buttons.length; b++) {
+        var on = gp.buttons[b].pressed || gp.buttons[b].value > 0.5;
+        if (on && !sawInput) {
+          sawInput = true;
+          setCheck("c-input", "pass", "buttons registering");
+          playTone();
+        }
+        btns += '<span class="b' + (on ? " on" : "") + '">' + b + "</span>";
+      }
+      var axes = [];
+      for (var a = 0; a < gp.axes.length; a++) {
+        var v = gp.axes[a];
+        if (Math.abs(v) > 0.5 && !sawInput) {
+          sawInput = true;
+          setCheck("c-input", "pass", "axes registering");
+          playTone();
+        }
+        axes.push(v.toFixed(2));
+      }
+      html += '<div class="pad"><div class="pid">#' + gp.index + "  " + gp.id + "</div>" +
+              '<div class="btns">' + btns + "</div>" +
+              '<div class="axes">axes: ' + axes.join("  ") + "</div></div>";
+    }
+    padsEl.innerHTML = html;
+
+    if (sawPad && !sawInput) setCheck("c-input", "wait", "press a button…");
+    requestAnimationFrame(poll);
+  }
+  requestAnimationFrame(poll);
+
+  // ── 4. Audio ──────────────────────────────────────────────────────────────
+  // A button press is the user gesture that lets WebAudio start; the tone
+  // confirms HDMI audio survives the cage / no-desktop session.
+  var audioCtx = null;
+  function playTone() {
+    try {
+      if (!audioCtx) {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC();
+      }
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      var osc = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.frequency.value = 660;
+      gain.gain.value = 0.15;
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.15);
+      setCheck("c-audio", "pass", "tone played — did you hear it?");
+    } catch (e) {
+      setCheck("c-audio", "fail", String(e));
+    }
+  }
+})();
+</script>
+</body>
+</html>

@@ -540,6 +540,14 @@ export function ConsoleHomeView({
                 {room.players.length} / 4
               </span>
             </div>
+            {controllerCount > 0 && room.players.length < 4 && (
+              <div className="nunito" style={{
+                fontSize: 11, color: "var(--text-dim)", marginBottom: 12,
+                display: "flex", alignItems: "center", gap: 6,
+              }}>
+                <span>🎮</span> Press a button on another controller to add a player
+              </div>
+            )}
             <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
               {[0, 1, 2, 3].map((i) => (
                 <PlayerSlot

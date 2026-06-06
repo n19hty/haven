@@ -29,9 +29,14 @@ else
   echo "[1/7] Node.js $(node -v) already installed."
 fi
 
-# ── Python (runtime — the server is FastAPI + python-socketio) ────────────────
-echo "[2/7] Installing Python 3 + venv..."
-sudo apt-get install -y python3 python3-venv python3-pip
+# ── Python runtime + console-kiosk deps ───────────────────────────────────────
+# cage = minimal Wayland kiosk compositor; bluez = Bluetooth controllers.
+echo "[2/7] Installing Python 3 + console-kiosk deps (cage, chromium, bluez)..."
+sudo apt-get install -y python3 python3-venv python3-pip cage bluez
+if ! command -v chromium-browser &>/dev/null && ! command -v chromium &>/dev/null; then
+  sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium || \
+    echo "  ! Could not auto-install Chromium — install it manually."
+fi
 
 # ── Ensure enough swap so the client build doesn't get OOM-killed ─────────────
 # `tsc && vite build` can exhaust RAM on 1–2 GB Pis; the build then dies with a
@@ -111,30 +116,59 @@ sudo systemctl enable haven
 sudo systemctl restart haven
 echo "  Server service installed and started."
 
-# ── Kiosk autostart ───────────────────────────────────────────────────────────
-echo "[7/7] Setting up kiosk mode autostart..."
-AUTOSTART_DIR="/home/$PI_USER/.config/autostart"
-mkdir -p "$AUTOSTART_DIR"
-# Generate the autostart entry pointing at *this* checkout, so it works
-# regardless of the user/home or where Haven was cloned.
-tee "$AUTOSTART_DIR/haven-kiosk.desktop" > /dev/null <<DESKTOP
-[Desktop Entry]
-Type=Application
-Name=Haven Kiosk
-Exec=$HAVEN_DIR/scripts/kiosk.sh
-Hidden=false
-NoDisplay=false
-X-GNOME-Autostart-enabled=true
-DESKTOP
-chmod +x "$HAVEN_DIR/scripts/kiosk.sh"
-echo "  Kiosk autostart installed."
+# ── Console kiosk (no desktop) ─────────────────────────────────────────────────
+echo "[7/7] Configuring console kiosk (boots straight into Haven, no desktop)..."
+chmod +x "$HAVEN_DIR/scripts/kiosk.sh" \
+         "$HAVEN_DIR/scripts/haven-update.sh" \
+         "$HAVEN_DIR/scripts/haven-rollback.sh"
+
+# Boot to a plain console — no display manager, no desktop. (Reversible:
+# `sudo systemctl set-default graphical.target` brings a desktop back.)
+sudo systemctl set-default multi-user.target
+
+# Autologin the Pi user on tty1 so cage gets a seat (DRM + input) and a user
+# session (PipeWire audio) — the pieces a bare multi-user boot otherwise lacks.
+sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
+sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf > /dev/null <<AUTOLOGIN
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $PI_USER --noclear %I \$TERM
+AUTOLOGIN
+
+# Keep the user's systemd/PipeWire instance alive without a desktop.
+sudo loginctl enable-linger "$PI_USER" || true
+
+# Launch the kiosk from the tty1 login shell ONLY — SSH sessions stay a normal
+# shell so you can update/administer the box.
+PROFILE="/home/$PI_USER/.bash_profile"
+MARKER="# >>> haven kiosk >>>"
+if ! grep -qF "$MARKER" "$PROFILE" 2>/dev/null; then
+  cat >> "$PROFILE" <<PROFILE_BLOCK
+
+$MARKER
+[ -f "\$HOME/.profile" ] && . "\$HOME/.profile"
+if [ "\$(tty)" = "/dev/tty1" ] && [ -z "\${WAYLAND_DISPLAY:-}" ]; then
+  exec "$HAVEN_DIR/scripts/kiosk.sh"
+fi
+# <<< haven kiosk <<<
+PROFILE_BLOCK
+  chown "$PI_USER":"$PI_USER" "$PROFILE" 2>/dev/null || true
+fi
+
+# Drop the old desktop-autostart kiosk entry if a previous setup left one.
+rm -f "/home/$PI_USER/.config/autostart/haven-kiosk.desktop" 2>/dev/null || true
+
+sudo systemctl daemon-reload
+echo "  Console kiosk configured."
 
 echo ""
 echo "✓ Haven setup complete!"
 echo ""
-echo "  Server:  http://$(hostname -I | awk '{print $1}'):3001"
-echo "  Status:  systemctl status haven"
-echo "  Logs:    journalctl -u haven -f"
+echo "  Server:   http://$(hostname -I | awk '{print $1}'):3001"
+echo "  Status:   systemctl status haven"
+echo "  Logs:     journalctl -u haven -f"
+echo "  Update:   bash scripts/haven-update.sh    (pull + rebuild + auto-rollback)"
+echo "  Rollback: bash scripts/haven-rollback.sh"
 echo ""
-echo "  Reboot to launch in kiosk mode: sudo reboot"
+echo "  Reboot to launch the console: sudo reboot"
 echo ""

@@ -1,42 +1,44 @@
 #!/bin/bash
-# Haven — Kiosk launcher for Raspberry Pi
-# Launches Chromium in full-screen kiosk mode
+# Haven — console kiosk launcher (no desktop).
+#
+# Invoked from the tty1 autologin session (see setup-pi.sh). Runs the Haven UI
+# full-screen in cage (a minimal Wayland kiosk compositor) pointed at the local
+# server. Loops forever, so killing cage (e.g. `pkill -x cage` during an update)
+# relaunches Chromium with the freshly built client.
+#
+# The tty1 autologin session gives cage a seat (DRM master + input) and a user
+# PipeWire instance for audio — the session pieces a bare multi-user.target
+# boot would otherwise lack.
 
-# Disable screen blanking and power saving
-xset s off
-xset -dpms
-xset s noblank
+set -u
 
-# Hide the mouse cursor after 0.1 seconds of inactivity
-unclutter -idle 0.1 -root &
+HAVEN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+PORT="${PORT:-3001}"
 
-# Wait for the Haven server to be ready (max 30s)
-echo "Waiting for Haven server..."
-for i in $(seq 1 30); do
-  if curl -s http://localhost:3001/api/games &>/dev/null; then
-    echo "Server ready."
-    break
-  fi
+CHROMIUM=""
+command -v chromium-browser &>/dev/null && CHROMIUM=chromium-browser
+[ -z "$CHROMIUM" ] && command -v chromium &>/dev/null && CHROMIUM=chromium
+if [ -z "$CHROMIUM" ]; then
+  echo "haven kiosk: chromium not found (tried chromium-browser, chromium)." >&2
+  exec bash  # drop to a shell rather than spinning
+fi
+
+# Wait for the server to answer before showing the UI (bash /dev/tcp, no curl).
+for _ in $(seq 1 60); do
+  (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null && { exec 3>&- 3<&- 2>/dev/null; break; }
   sleep 1
 done
 
-# The Chromium binary is named differently across Raspberry Pi OS releases.
-if command -v chromium-browser &>/dev/null; then
-  CHROMIUM=chromium-browser
-elif command -v chromium &>/dev/null; then
-  CHROMIUM=chromium
-else
-  echo "ERROR: Chromium not found (tried chromium-browser, chromium)." >&2
-  exit 1
-fi
-
-# Launch Chromium in kiosk mode
-"$CHROMIUM" \
-  --noerrdialogs \
-  --disable-infobars \
-  --disable-session-crashed-bubble \
-  --disable-restore-session-state \
-  --kiosk \
-  --disable-features=TranslateUI \
-  --check-for-update-interval=604800 \
-  "http://localhost:3001"
+while true; do
+  cage -- "$CHROMIUM" \
+    --ozone-platform=wayland \
+    --kiosk \
+    --noerrdialogs \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --disable-restore-session-state \
+    --check-for-update-interval=31536000 \
+    "http://localhost:$PORT" || true
+  # cage exited (crash, or an update killed it) — relaunch with the new build.
+  sleep 1
+done

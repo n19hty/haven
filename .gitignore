@@ -36,6 +36,10 @@ games/**/*.py[cod]
 *.log
 npm-debug.log*
 
+# On-device deploy state (written by scripts/haven-update.sh)
+.haven-last-good
+.haven-last-good.prev
+
 # OS cruft
 .DS_Store
 Thumbs.db

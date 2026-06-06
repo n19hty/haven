@@ -35,8 +35,31 @@ curl -fsSL https://raw.githubusercontent.com/n19hty/haven/main/scripts/bootstrap
 ```
 
 This installs Node 20 (to build the client) and Python 3 (the server runtime)
-plus the kiosk dependencies, clones the repo, builds the client, creates the
-server's Python virtualenv, installs a `systemd` service (`haven.service`), and
-sets up Chromium kiosk autostart. Reboot and the Pi comes up as the console.
+plus the kiosk dependencies (`cage`, Chromium, `bluez`), clones the repo, builds
+the client, creates the server's Python virtualenv, installs a `systemd` service
+(`haven.service`), and configures a **console kiosk**: the Pi boots to a plain
+console (no desktop), autologs in on tty1, and launches the UI full-screen in
+`cage` (a minimal Wayland compositor) via `scripts/kiosk.sh`. Reboot and the Pi
+comes up as the console. SSH stays on for administration.
 
 If you already have a checkout on the Pi, run `bash scripts/setup-pi.sh` instead.
+
+### Updating a deployed device
+
+Nothing auto-updates. Push your changes to `main`, then run the updater over SSH:
+
+```bash
+ssh pi@<haven-ip> 'cd ~/haven && bash scripts/haven-update.sh'
+```
+
+It records the running commit, fast-forwards `main`, rebuilds, restarts the
+server, reloads the kiosk, and health-checks the server. If the new build
+doesn't come up healthy it **rolls back to the previous commit** automatically,
+so the console keeps running the last good version. To revert manually:
+
+```bash
+ssh pi@<haven-ip> 'cd ~/haven && bash scripts/haven-rollback.sh'
+```
+
+To get a normal desktop back on the device: `sudo systemctl set-default
+graphical.target` (the kiosk only launches on tty1, so SSH is never affected).

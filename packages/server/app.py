@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import socket
+import subprocess
 from pathlib import Path
 
 import socketio
@@ -58,6 +59,63 @@ async def server_info():
     # The TV often loads the app via localhost, so it can't build a phone-reachable
     # join URL on its own. Report the LAN address the client should advertise.
     return {"host": _lan_ip(), "port": int(os.environ.get("PORT", "3001"))}
+
+
+# ── Device admin (status / update / rollback) ──────────────────────────────────
+# Repo root is two levels up from this file; scripts/ lives there.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SCRIPTS = _REPO_ROOT / "scripts"
+
+
+def _git(*args: str) -> str | None:
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(_REPO_ROOT), *args], text=True, stderr=subprocess.DEVNULL
+        ).strip()
+    except Exception:
+        return None
+
+
+def _run_detached(script: str) -> bool:
+    """Launch a maintenance script in its OWN systemd scope so it survives the
+    haven.service restart it triggers (a plain child would be killed when the
+    server stops). Requires passwordless sudo for systemd-run (default on Pi OS)."""
+    path = _SCRIPTS / script
+    if not path.exists():
+        return False
+    unit = f"haven-{script.replace('.sh', '')}"
+    try:
+        subprocess.Popen(
+            ["sudo", "-n", "systemd-run", "--collect", "--unit", unit,
+             "/bin/bash", str(path)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        return True
+    except Exception as e:  # noqa: BLE001
+        print(f"[admin] failed to launch {script}: {e}")
+        return False
+
+
+@api.get("/api/status")
+async def status():
+    return {
+        "commit": _git("rev-parse", "--short", "HEAD"),
+        "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
+        "message": _git("log", "-1", "--pretty=%s"),
+        "host": _lan_ip(),
+        "port": int(os.environ.get("PORT", "3001")),
+    }
+
+
+@api.post("/api/update")
+async def update():
+    # Pull main, rebuild, restart, health-check, auto-rollback on failure.
+    return {"started": _run_detached("haven-update.sh")}
+
+
+@api.post("/api/rollback")
+async def rollback():
+    return {"started": _run_detached("haven-rollback.sh")}
 
 
 # Serve the built client in production. packages/client/dist is created by

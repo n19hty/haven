@@ -6,6 +6,7 @@ import { PhoneView } from "./views/PhoneView";
 import { EntryView } from "./views/EntryView";
 import { BootAnimation } from "./views/BootAnimation";
 import { LoginScreen } from "./views/LoginScreen";
+import { AdminView } from "./views/AdminView";
 import { Profile } from "./hooks/useProfiles";
 import { RoomState, Player, GameMeta } from "@haven/shared";
 import "./games/ticTacToe"; // registers the game's TV + controller components
@@ -28,6 +29,11 @@ export function App() {
   useEffect(() => {
     if (isPhoneMode) store.setMode("entry");
   }, []); // eslint-disable-line
+
+  // Device admin panel (phone-reachable) — update/restart without a controller.
+  if (new URLSearchParams(window.location.search).get("admin") === "1") {
+    return <AdminView />;
+  }
 
   function handleLogin(profile: Profile) {
     if (hosted.current) return;

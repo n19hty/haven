@@ -39,6 +39,7 @@ npm-debug.log*
 # On-device deploy state (written by scripts/haven-update.sh)
 .haven-last-good
 .haven-last-good.prev
+.haven-update-status
 
 # OS cruft
 .DS_Store

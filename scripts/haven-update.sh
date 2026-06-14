@@ -19,11 +19,14 @@ PORT="${PORT:-3001}"
 BRANCH="${HAVEN_BRANCH:-main}"
 LAST_GOOD="$HAVEN_DIR/.haven-last-good"
 PREV_GOOD="$HAVEN_DIR/.haven-last-good.prev"
-STATUS_FILE="/tmp/haven-update-status"
+# Keep the status file in the repo dir (owned by $PI_USER), not /tmp, so
+# both root (via systemd-run) and the pi user (manual SSH runs) can write to
+# it without hitting sticky-bit ownership conflicts.
+STATUS_FILE="$HAVEN_DIR/.haven-update-status"
 
 _status() {
-  # Write JSON status for the /api/update-status endpoint.
   printf '{"stage":"%s","message":"%s","progress":%d}\n' "$1" "$2" "$3" > "$STATUS_FILE"
+  chmod 666 "$STATUS_FILE" 2>/dev/null || true
 }
 
 _commit() { git rev-parse HEAD; }

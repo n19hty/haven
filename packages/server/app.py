@@ -161,7 +161,7 @@ async def check_update():
     return result
 
 
-_STATUS_FILE = Path("/tmp/haven-update-status")
+_STATUS_FILE = _REPO_ROOT / ".haven-update-status"
 
 
 @api.get("/api/update-status")

@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { Player, RoomState } from "@haven/shared";
 
-export type AppMode = "boot" | "login" | "entry" | "tv" | "phone";
+export type AppMode = "boot" | "setup" | "login" | "entry" | "tv" | "phone";
 
 export interface GameStore {
   mode: AppMode;

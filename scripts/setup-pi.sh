@@ -158,6 +158,25 @@ fi
 # Drop the old desktop-autostart kiosk entry if a previous setup left one.
 rm -f "/home/$PI_USER/.config/autostart/haven-kiosk.desktop" 2>/dev/null || true
 
+# ── HDMI / display config for TV kiosk ────────────────────────────────────────
+# Without these, a 4K TV causes Chromium to render at 3840×2160 CSS pixels (UI
+# appears tiny) and TVs often overscan / crop the image. Forcing 1080p 60Hz is
+# the safest default: all modern TVs accept it and the TV's upscaler fills the
+# screen. Override hdmi_mode if you prefer 4K (mode 97 = 4K@30, 107 = 4K@60).
+BOOT_CONFIG="/boot/firmware/config.txt"
+if [ ! -f "$BOOT_CONFIG" ]; then
+  BOOT_CONFIG="/boot/config.txt"  # fallback for older Pi OS layouts
+fi
+if [ -f "$BOOT_CONFIG" ]; then
+  echo "  Configuring HDMI for TV kiosk (disable overscan, force 1080p)..."
+  grep -q 'disable_overscan' "$BOOT_CONFIG" || \
+    echo 'disable_overscan=1' | sudo tee -a "$BOOT_CONFIG" >/dev/null
+  grep -q 'hdmi_group' "$BOOT_CONFIG" || \
+    printf '\n# Haven: force 1080p 60Hz — prevents tiny UI on 4K TVs\nhdmi_group=1\nhdmi_mode=16\n' \
+    | sudo tee -a "$BOOT_CONFIG" >/dev/null
+  echo "  HDMI config written to $BOOT_CONFIG (takes effect on next reboot)."
+fi
+
 sudo systemctl daemon-reload
 echo "  Console kiosk configured."
 

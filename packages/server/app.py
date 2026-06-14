@@ -161,6 +161,21 @@ async def check_update():
     return result
 
 
+_STATUS_FILE = Path("/tmp/haven-update-status")
+
+
+@api.get("/api/update-status")
+async def update_status():
+    """Read the current update stage written by haven-update.sh."""
+    import json
+    try:
+        if _STATUS_FILE.exists():
+            return json.loads(_STATUS_FILE.read_text())
+    except Exception:
+        pass
+    return {"stage": "idle", "progress": 0}
+
+
 @api.post("/api/bt/scan")
 async def bt_scan():
     """Start a 30-second Bluetooth scan window to pair a new controller."""

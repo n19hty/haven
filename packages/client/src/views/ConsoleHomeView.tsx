@@ -156,6 +156,11 @@ export function ConsoleHomeView({
   // ── Update check ─────────────────────────────────────────────────────────────
   const [updateInfo, setUpdateInfo] = useState<{ latestMessage?: string } | null>(null);
   const [updating, setUpdating]     = useState(false);
+  const [updateProgress, setUpdateProgress] = useState(0);
+  const [updateStage, setUpdateStage]       = useState("Preparing update…");
+  const [serverRestarting, setServerRestarting] = useState(false);
+  const failCountRef  = useRef(0);
+  const reloadedRef   = useRef(false);
 
   useEffect(() => {
     const check = () =>
@@ -171,8 +176,45 @@ export function ConsoleHomeView({
   async function handleUpdate() {
     setUpdateInfo(null);
     setUpdating(true);
+    setUpdateProgress(0);
+    setUpdateStage("Starting update…");
+    setServerRestarting(false);
+    failCountRef.current = 0;
+    reloadedRef.current = false;
     try { await fetch("/api/update", { method: "POST" }); } catch { /* server restarts */ }
   }
+
+  useEffect(() => {
+    if (!updating) return;
+    const poll = async () => {
+      try {
+        const r = await fetch("/api/update-status");
+        if (!r.ok) throw new Error();
+        const d: { stage?: string; message?: string; progress?: number } = await r.json();
+        failCountRef.current = 0;
+        setServerRestarting(false);
+        if (d.progress !== undefined) setUpdateProgress(d.progress);
+        if (d.message) setUpdateStage(d.message);
+        if (d.stage === "done" && !reloadedRef.current) {
+          reloadedRef.current = true;
+          setTimeout(() => window.location.reload(), 2500);
+        }
+      } catch {
+        failCountRef.current += 1;
+        if (failCountRef.current >= 3) setServerRestarting(true);
+        // Reload after ~45s of no server response (handles rollback + restart)
+        if (failCountRef.current === 22 && !reloadedRef.current) {
+          reloadedRef.current = true;
+          setTimeout(() => window.location.reload(), 2000);
+        }
+      }
+    };
+    poll();
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
+  }, [updating]);
+
+  const btProgress = btPhase === "scanning" ? Math.round(((30 - btSecsLeft) / 30) * 100) : 0;
 
   const { w }    = useViewport();
   const isMobile = w < 900;
@@ -348,22 +390,42 @@ export function ConsoleHomeView({
       {updating && (
         <div style={{
           position: "absolute", inset: 0, zIndex: 50,
-          background: "rgba(11,12,14,0.92)", backdropFilter: "blur(10px)",
+          background: "rgba(11,12,14,0.94)", backdropFilter: "blur(10px)",
           display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center", gap: 16,
+          alignItems: "center", justifyContent: "center", gap: 14,
           animation: "fadeIn 0.3s ease-out",
         }}>
           <div className="nunito" style={{
-            fontSize: 32, fontWeight: 900, color: "var(--text)",
+            fontSize: 30, fontWeight: 900, color: "var(--text)",
             textShadow: "0 0 30px rgba(255,255,255,0.3)",
           }}>
-            Updating Haven…
+            {serverRestarting ? "Server restarting…" : "Updating Haven…"}
           </div>
           <div style={{ fontSize: 14, color: "var(--text-mid)" }}>
-            The console will rebuild and restart automatically.
+            {serverRestarting
+              ? "Almost there — new version coming up."
+              : updateStage}
           </div>
-          <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 4 }}>
-            This takes 1–3 minutes on a Pi 5.
+          {/* Progress bar */}
+          <div style={{
+            width: 320, height: 4,
+            background: "rgba(255,255,255,0.08)", borderRadius: 4, overflow: "hidden",
+            marginTop: 8,
+          }}>
+            <div style={{
+              height: "100%", borderRadius: 4,
+              background: "linear-gradient(90deg, var(--sky), #818CF8)",
+              width: serverRestarting ? "90%" : `${updateProgress}%`,
+              transition: "width 1.2s ease-out",
+              ...(serverRestarting
+                ? { animation: "shimmer 2s ease-in-out infinite" }
+                : {}),
+            }} />
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
+            {serverRestarting
+              ? "Waiting for server to come back online…"
+              : "Takes 1–3 minutes on Pi 5"}
           </div>
         </div>
       )}
@@ -725,8 +787,22 @@ export function ConsoleHomeView({
             </div>
 
             {btPhase === "scanning" && (
-              <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 12, lineHeight: 1.6 }}>
-                Hold the Xbox button + pair button until the logo flashes rapidly.
+              <div style={{ marginBottom: 12 }}>
+                <div style={{
+                  width: "100%", height: 3,
+                  background: "rgba(255,255,255,0.07)", borderRadius: 2, overflow: "hidden",
+                  marginBottom: 7,
+                }}>
+                  <div style={{
+                    height: "100%", borderRadius: 2,
+                    background: "linear-gradient(90deg, var(--sky), #818CF8)",
+                    width: `${btProgress}%`,
+                    transition: "width 1s linear",
+                  }} />
+                </div>
+                <div style={{ fontSize: 10, color: "var(--text-dim)", lineHeight: 1.5 }}>
+                  Hold Xbox + pair button until logo flashes rapidly · {btSecsLeft}s remaining
+                </div>
               </div>
             )}
             {btPhase === "idle" && controllerCount === 0 && (

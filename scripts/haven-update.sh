@@ -19,6 +19,12 @@ PORT="${PORT:-3001}"
 BRANCH="${HAVEN_BRANCH:-main}"
 LAST_GOOD="$HAVEN_DIR/.haven-last-good"
 PREV_GOOD="$HAVEN_DIR/.haven-last-good.prev"
+STATUS_FILE="/tmp/haven-update-status"
+
+_status() {
+  # Write JSON status for the /api/update-status endpoint.
+  printf '{"stage":"%s","message":"%s","progress":%d}\n' "$1" "$2" "$3" > "$STATUS_FILE"
+}
 
 _commit() { git rev-parse HEAD; }
 
@@ -32,17 +38,23 @@ _health() {
 }
 
 _build_restart() {
-  echo "  installing deps + building..."
+  _status "install" "Installing dependencies…" 15
+  echo "  installing deps..."
   rm -rf node_modules packages/*/node_modules
   npm install --no-package-lock --legacy-peer-deps || return 1
+  _status "build" "Building client…" 45
+  echo "  building client..."
   NODE_OPTIONS="--max-old-space-size=512" npm run build || return 1
+  _status "restart" "Restarting services…" 88
   # Server picks up new Python + serves the new dist.
   sudo systemctl restart haven || return 1
   # Reload the kiosk so Chromium shows the new client (kiosk.sh relaunches it).
   pkill -x cage 2>/dev/null || true
+  _status "health" "Health check…" 95
   _health
 }
 
+_status "fetch" "Pulling latest code…" 5
 PREV="$(_commit)"
 echo "[update] running commit: $PREV"
 
@@ -50,6 +62,7 @@ git fetch origin "$BRANCH" || { echo "[update] git fetch failed."; exit 1; }
 git checkout "$BRANCH" 2>/dev/null || true
 if ! git merge --ff-only "origin/$BRANCH"; then
   echo "[update] cannot fast-forward (local changes on the device?). Aborting." >&2
+  _status "failed" "Cannot fast-forward — local changes on device?" 0
   exit 1
 fi
 
@@ -63,13 +76,17 @@ if _build_restart; then
   echo "$PREV" > "$PREV_GOOD"
   echo "$NEW"  > "$LAST_GOOD"
   echo "[update] ✓ healthy on $NEW"
+  _status "done" "Update complete!" 100
 else
+  _status "rollingback" "Build failed — rolling back…" 0
   echo "[update] ✗ $NEW did not come up healthy — rolling back to $PREV" >&2
   git reset --hard "$PREV"
   if _build_restart; then
     echo "[update] ✓ rolled back to $PREV (healthy). Fix the code and push, then re-run." >&2
+    _status "done" "Rolled back to previous version." 100
   else
     echo "[update] !! rollback to $PREV is ALSO unhealthy — needs manual attention." >&2
+    _status "failed" "Rollback also failed — needs manual attention." 0
   fi
   exit 1
 fi

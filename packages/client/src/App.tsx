@@ -7,6 +7,7 @@ import { EntryView } from "./views/EntryView";
 import { BootAnimation } from "./views/BootAnimation";
 import { LoginScreen } from "./views/LoginScreen";
 import { AdminView } from "./views/AdminView";
+import { ControllerSetupView } from "./views/ControllerSetupView";
 import { Profile } from "./hooks/useProfiles";
 import { RoomState, Player, GameMeta } from "@haven/shared";
 import "./games/ticTacToe"; // registers the game's TV + controller components
@@ -71,7 +72,8 @@ export function App() {
   }
 
   // ── TV / console ───────────────────────────────────────────────────────────
-  if (store.mode === "boot")  return <BootAnimation onComplete={() => store.setMode("login")} />;
+  if (store.mode === "boot")  return <BootAnimation onComplete={() => store.setMode("setup")} />;
+  if (store.mode === "setup") return <ControllerSetupView onContinue={() => store.setMode("login")} />;
   if (store.mode === "login") return <LoginScreen onLogin={handleLogin} />;
   if (!store.roomState || !store.myPlayer || !activeProfile) return <Loading />;
 

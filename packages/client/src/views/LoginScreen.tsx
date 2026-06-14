@@ -9,57 +9,37 @@ interface Props {
   onLogin: (profile: Profile) => void;
 }
 
-type Screen = "pick" | "create" | "edit";
+type Screen = "pick" | "create";
 
 export function LoginScreen({ onLogin }: Props) {
-  const { profiles, addProfile, updateProfile, removeProfile } = useProfiles();
-  // Default to guest when no saved profiles exist so pressing A starts immediately.
-  const [selected, setSelected]   = useState<string | null>(profiles[0]?.id ?? "guest");
-  const [screen, setScreen]       = useState<Screen>("pick");
-  const [editTarget, setEditTarget] = useState<string | null>(null);
-  const [newName, setNewName]     = useState("");
-  const [newChar, setNewChar]     = useState<CharacterConfig>(DEFAULT_CHARACTER);
-  const [managing, setManaging]   = useState(false);
+  const { profiles, addProfile } = useProfiles();
+  const [screen, setScreen]  = useState<Screen>("pick");
+  const [selected, setSelected] = useState<string>(profiles[0]?.id ?? "guest");
+  const [newName, setNewName]   = useState("");
+  const [newChar, setNewChar]   = useState<CharacterConfig>(DEFAULT_CHARACTER);
+
+  const allIds = [...profiles.map((p) => p.id), "guest"];
+
+  function handleContinue() {
+    if (selected === "guest") { onLogin(GUEST_PROFILE); return; }
+    const p = profiles.find((x) => x.id === selected);
+    if (p) onLogin(p);
+  }
 
   function handleCreate() {
     if (!newName.trim()) return;
     const p = addProfile(newName.trim(), newChar);
-    setSelected(p.id);
-    setScreen("pick");
-    setNewName(""); setNewChar(DEFAULT_CHARACTER);
+    onLogin(p);
   }
 
-  function handleEdit() {
-    if (!editTarget) return;
-    updateProfile(editTarget, { character: newChar, name: newName || undefined });
-    setScreen("pick"); setEditTarget(null);
-  }
-
-  function startEdit(profile: Profile) {
-    setEditTarget(profile.id);
-    setNewName(profile.name);
-    setNewChar(profile.character);
-    setScreen("edit");
-  }
-
-  function handleContinue() {
-    if (selected === "guest") { onLogin(GUEST_PROFILE); return; }
-    const p = profiles.find((x) => x.id === selected) ?? profiles[0];
-    if (p) onLogin(p);
-  }
-
-  // Controller navigation: d-pad selects, A continues, B exits character creator.
   useGamepads((e) => {
-    if (e.control === "back" && (screen === "create" || screen === "edit")) {
-      setScreen("pick"); setEditTarget(null);
+    if (screen === "create") {
+      if (e.control === "back") { setScreen("pick"); setNewName(""); setNewChar(DEFAULT_CHARACTER); }
       return;
     }
-    if (screen !== "pick" || managing) return;
     if (e.control === "confirm") { handleContinue(); return; }
     if (e.control === "left" || e.control === "right") {
-      // Navigation order: saved profiles … Guest
-      const allIds = [...profiles.map((p) => p.id), "guest"];
-      const idx = Math.max(0, allIds.indexOf(selected ?? "guest"));
+      const idx  = Math.max(0, allIds.indexOf(selected));
       const next = e.control === "left"
         ? Math.max(0, idx - 1)
         : Math.min(allIds.length - 1, idx + 1);
@@ -67,49 +47,51 @@ export function LoginScreen({ onLogin }: Props) {
     }
   });
 
-  // ── CREATE / EDIT screen ────────────────────────────────────────────────────
-  if (screen === "create" || screen === "edit") {
-    const isEdit = screen === "edit";
+  // ── CREATE screen ──────────────────────────────────────────────────────────
+  if (screen === "create") {
     return (
       <div style={{
         minHeight: "100dvh", position: "relative",
-        display: "flex", flexDirection: "column", alignItems: "center",
-        justifyContent: "flex-start",
-        padding: "32px 20px 24px",
+        display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "flex-start",
+        padding: "32px 20px 40px",
         fontFamily: "'Inter', sans-serif",
         animation: "fadeIn 0.3s ease-out",
         overflowY: "auto",
       }}>
         <SkyBackground />
-        {/* Back */}
         <button
-          onClick={() => { setScreen("pick"); setEditTarget(null); }}
+          onClick={() => { setScreen("pick"); setNewName(""); setNewChar(DEFAULT_CHARACTER); }}
           style={{
-            alignSelf: "flex-start", marginBottom: 24, position: "relative", zIndex: 1,
+            alignSelf: "flex-start", marginBottom: 28, position: "relative", zIndex: 1,
             background: "none", border: "none", cursor: "pointer",
-            color: "var(--text-mid)", fontSize: 14, display: "flex",
-            alignItems: "center", gap: 6, fontFamily: "'Nunito', sans-serif",
+            color: "var(--text-mid)", fontSize: 14,
+            display: "flex", alignItems: "center", gap: 6,
+            fontFamily: "'Nunito', sans-serif",
           }}
-        >
-          ← Back
-        </button>
+        >← Back</button>
 
         <h2 className="nunito" style={{
-          fontSize: 28, fontWeight: 900, marginBottom: 6, position: "relative", zIndex: 1,
-          color: "var(--text)", textAlign: "center",
+          fontSize: 28, fontWeight: 900, marginBottom: 6,
+          position: "relative", zIndex: 1, color: "var(--text)", textAlign: "center",
         }}>
-          {isEdit ? "Edit Character" : "Create Your Character"}
+          Create Your Character
         </h2>
-        <p style={{ color: "var(--text-mid)", fontSize: 14, marginBottom: 28, textAlign: "center", position: "relative", zIndex: 1 }}>
-          {isEdit ? "Update how you look in Haven." : "Choose how you'll appear across Haven."}
+        <p style={{
+          color: "var(--text-mid)", fontSize: 14, marginBottom: 28,
+          textAlign: "center", position: "relative", zIndex: 1,
+        }}>
+          Choose how you'll appear in Haven.
         </p>
 
-        <div className="glass" style={{ width: "100%", maxWidth: 600, padding: 28, position: "relative", zIndex: 1 }}>
+        <div className="glass" style={{
+          width: "100%", maxWidth: 600, padding: 28,
+          position: "relative", zIndex: 1,
+        }}>
           <CharacterCreator config={newChar} onChange={setNewChar} />
 
           <div style={{
-            borderTop: "1px solid var(--border)",
-            marginTop: 20, paddingTop: 20,
+            borderTop: "1px solid var(--border)", marginTop: 20, paddingTop: 20,
             display: "flex", flexDirection: "column", gap: 10,
           }}>
             <label className="mono" style={{ fontSize: 9, color: "var(--text-dim)", letterSpacing: 2 }}>
@@ -118,10 +100,10 @@ export function LoginScreen({ onLogin }: Props) {
             <input
               value={newName}
               onChange={(e) => setNewName(e.target.value.slice(0, 16))}
-              onKeyDown={(e) => e.key === "Enter" && (isEdit ? handleEdit() : handleCreate())}
+              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
               placeholder="Your name"
               maxLength={16}
-              autoFocus={!isEdit}
+              autoFocus
               style={{
                 width: "100%", padding: "12px 16px",
                 background: "rgba(255,255,255,0.04)",
@@ -136,10 +118,10 @@ export function LoginScreen({ onLogin }: Props) {
             <button
               className="btn btn-sky"
               disabled={!newName.trim()}
-              onClick={isEdit ? handleEdit : handleCreate}
+              onClick={handleCreate}
               style={{ padding: "14px", fontSize: 16, marginTop: 4, opacity: newName.trim() ? 1 : 0.45 }}
             >
-              {isEdit ? "Save Changes" : "Create Character ✓"}
+              Create &amp; Play ✓
             </button>
           </div>
         </div>
@@ -147,13 +129,13 @@ export function LoginScreen({ onLogin }: Props) {
     );
   }
 
-  // ── PROFILE PICK screen ─────────────────────────────────────────────────────
+  // ── PICK screen ────────────────────────────────────────────────────────────
   return (
     <div style={{
       minHeight: "100dvh", position: "relative",
       display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
-      padding: "24px 20px",
+      padding: "32px 24px",
       fontFamily: "'Inter', sans-serif",
       overflow: "hidden",
       animation: "fadeIn 0.4s ease-out",
@@ -161,224 +143,154 @@ export function LoginScreen({ onLogin }: Props) {
       <SkyBackground />
 
       {/* Logo */}
-      <div style={{ marginBottom: 36, textAlign: "center", position: "relative", zIndex: 1 }}>
+      <div style={{ marginBottom: 40, textAlign: "center", position: "relative", zIndex: 1 }}>
         <div className="nunito" style={{
           fontSize: 40, fontWeight: 900, color: "#EEF4FF",
           letterSpacing: -1,
           textShadow: "0 0 36px rgba(255,255,255,0.55)",
           animation: "glow 4s ease-in-out infinite",
-        }}>
-          haven
-        </div>
-        <div className="mono" style={{ fontSize: 10, color: "var(--sky-light)", letterSpacing: 3, marginTop: 4, opacity: 0.7 }}>
-          ABOVE THE CLOUDS
+        }}>haven</div>
+        <div className="mono" style={{ fontSize: 9, color: "var(--sky-light)", letterSpacing: 3, marginTop: 4, opacity: 0.7 }}>
+          WHO'S PLAYING?
         </div>
       </div>
 
-      <h2 className="nunito" style={{
-        fontSize: 22, fontWeight: 800, marginBottom: 6, color: "var(--text)", position: "relative", zIndex: 1,
-      }}>
-        Who's playing?
-      </h2>
-      <p style={{
-        color: "var(--text-mid)", fontSize: 14, marginBottom: 36, position: "relative", zIndex: 1,
-      }}>
-        Select your profile or create a new one.
-      </p>
-
-      {/* Profile grid */}
+      {/* Cards */}
       <div style={{
         display: "flex", gap: 16, flexWrap: "wrap",
-        justifyContent: "center", maxWidth: 680, position: "relative", zIndex: 1,
+        justifyContent: "center", maxWidth: 680,
+        position: "relative", zIndex: 1,
       }}>
+        {/* Saved profiles */}
         {profiles.map((p, i) => {
-          const isSelected = p.id === selected;
+          const isSel = p.id === selected;
           return (
-            <div
+            <ProfileCard
               key={p.id}
-              onClick={() => !managing ? setSelected(p.id) : removeProfile(p.id)}
-              style={{
-                display: "flex", flexDirection: "column", alignItems: "center",
-                gap: 10, cursor: "pointer", position: "relative",
-                animation: `cardIn 0.35s ease-out ${i * 0.07}s both`,
-              }}
+              delay={i * 0.07}
+              isSelected={isSel}
+              color={p.color}
+              label={p.name}
+              onClick={() => setSelected(p.id)}
+              onDoubleClick={() => { setSelected(p.id); onLogin(p); }}
             >
-              {/* Delete X */}
-              {managing && (
-                <div style={{
-                  position: "absolute", top: -6, right: -6, zIndex: 10,
-                  width: 22, height: 22, borderRadius: "50%",
-                  background: "#EF4444", color: "#fff",
-                  fontSize: 12, fontWeight: 900,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  boxShadow: "0 2px 8px rgba(239,68,68,0.5)",
-                }}>×</div>
-              )}
-
-              {/* Character card */}
-              <div style={{
-                width: 110, height: 140,
-                borderRadius: 20,
-                background: isSelected
-                  ? `radial-gradient(circle at 50% 35%, ${p.color}25 0%, rgba(18,14,46,0.8) 80%)`
-                  : "rgba(255,255,255,0.03)",
-                border: `2px solid ${isSelected ? p.color : "var(--border)"}`,
-                boxShadow: isSelected ? `0 0 30px ${p.color}30, 0 8px 30px rgba(0,0,0,0.4)` : "0 4px 20px rgba(0,0,0,0.3)",
-                display: "flex", alignItems: "flex-end", justifyContent: "center",
-                paddingBottom: 4,
-                transform: isSelected ? "scale(1.06)" : "scale(1)",
-                transition: "all 0.2s ease",
-                overflow: "hidden",
-                position: "relative",
-              }}>
-                <Character config={p.character} size={90} />
-                {/* Edit button */}
-                {!managing && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); startEdit(p); }}
-                    style={{
-                      position: "absolute", top: 6, right: 6,
-                      width: 24, height: 24, borderRadius: "50%",
-                      background: "rgba(0,0,0,0.5)",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      color: "rgba(255,255,255,0.6)",
-                      fontSize: 11, cursor: "pointer",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}
-                    title="Edit character"
-                  >✎</button>
-                )}
-              </div>
-
-              <div style={{
-                fontFamily: "'Nunito', sans-serif",
-                fontWeight: 700, fontSize: 14,
-                color: isSelected ? "var(--text)" : "var(--text-mid)",
-                transition: "all 0.2s",
-              }}>
-                {p.name}
-              </div>
-
-              {isSelected && (
-                <div style={{
-                  width: 8, height: 8, borderRadius: "50%",
-                  background: p.color, boxShadow: `0 0 10px ${p.color}`,
-                  animation: "dotPulse 1.5s ease-in-out infinite",
-                }} />
-              )}
-            </div>
+              <Character config={p.character} size={90} />
+            </ProfileCard>
           );
         })}
 
         {/* Guest */}
-        {!managing && (() => {
-          const isSelected = selected === "guest";
+        {(() => {
+          const isSel = selected === "guest";
           return (
-            <div
+            <ProfileCard
+              delay={profiles.length * 0.07}
+              isSelected={isSel}
+              color="#6B7280"
+              label="Guest"
+              dashed
               onClick={() => setSelected("guest")}
               onDoubleClick={handleContinue}
-              style={{
-                display: "flex", flexDirection: "column", alignItems: "center",
-                gap: 10, cursor: "pointer",
-                animation: `cardIn 0.35s ease-out ${profiles.length * 0.07}s both`,
-              }}
             >
-              <div style={{
-                width: 110, height: 140, borderRadius: 20,
-                background: isSelected
-                  ? "radial-gradient(circle at 50% 35%, rgba(107,114,128,0.2) 0%, rgba(18,14,46,0.8) 80%)"
-                  : "rgba(255,255,255,0.02)",
-                border: `2px ${isSelected ? "solid rgba(156,163,175,0.8)" : "dashed rgba(255,255,255,0.2)"}`,
-                boxShadow: isSelected ? "0 0 30px rgba(107,114,128,0.2), 0 8px 30px rgba(0,0,0,0.4)" : "0 4px 20px rgba(0,0,0,0.3)",
-                display: "flex", alignItems: "flex-end", justifyContent: "center",
-                paddingBottom: 4,
-                transform: isSelected ? "scale(1.06)" : "scale(1)",
-                transition: "all 0.2s ease", overflow: "hidden", position: "relative",
-              }}>
-                <Character config={DEFAULT_CHARACTER} size={90} />
-              </div>
-              <div style={{
-                fontFamily: "'Nunito', sans-serif", fontWeight: 700, fontSize: 14,
-                color: isSelected ? "var(--text)" : "var(--text-mid)", transition: "all 0.2s",
-              }}>Guest</div>
-              {isSelected && (
-                <div style={{
-                  width: 8, height: 8, borderRadius: "50%",
-                  background: "#6B7280", boxShadow: "0 0 10px #6B7280",
-                  animation: "dotPulse 1.5s ease-in-out infinite",
-                }} />
-              )}
-            </div>
+              <Character config={DEFAULT_CHARACTER} size={90} />
+            </ProfileCard>
           );
         })()}
 
-        {/* Create new */}
-        {!managing && (
-          <div
-            onClick={() => { setNewName(""); setNewChar(DEFAULT_CHARACTER); setScreen("create"); }}
-            style={{
-              display: "flex", flexDirection: "column", alignItems: "center",
-              gap: 10, cursor: "pointer",
-              animation: `cardIn 0.35s ease-out ${profiles.length * 0.07}s both`,
+        {/* Add new */}
+        <div
+          onClick={() => { setNewName(""); setNewChar(DEFAULT_CHARACTER); setScreen("create"); }}
+          style={{
+            display: "flex", flexDirection: "column", alignItems: "center",
+            gap: 10, cursor: "pointer",
+            animation: `cardIn 0.35s ease-out ${(profiles.length + 1) * 0.07}s both`,
+          }}
+        >
+          <div style={{
+            width: 110, height: 140, borderRadius: 20,
+            background: "rgba(255,255,255,0.02)",
+            border: "2px dashed rgba(255,255,255,0.15)",
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            gap: 6, color: "var(--text-dim)", transition: "all 0.18s",
+          }}
+            onMouseOver={(e) => {
+              (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.4)";
+              (e.currentTarget as HTMLElement).style.color = "var(--sky-light)";
+            }}
+            onMouseOut={(e) => {
+              (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.15)";
+              (e.currentTarget as HTMLElement).style.color = "var(--text-dim)";
             }}
           >
-            <div style={{
-              width: 110, height: 140,
-              borderRadius: 20,
-              background: "rgba(255,255,255,0.02)",
-              border: "2px dashed rgba(255,255,255,0.2)",
-              display: "flex", flexDirection: "column",
-              alignItems: "center", justifyContent: "center",
-              gap: 8, color: "var(--text-dim)",
-              transition: "all 0.18s",
-            }}
-              onMouseOver={(e) => {
-                (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.5)";
-                (e.currentTarget as HTMLElement).style.color = "var(--sky-light)";
-              }}
-              onMouseOut={(e) => {
-                (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.2)";
-                (e.currentTarget as HTMLElement).style.color = "var(--text-dim)";
-              }}
-            >
-              <span style={{ fontSize: 32, lineHeight: 1 }}>+</span>
-              <span style={{ fontSize: 11, fontFamily: "'Nunito',sans-serif", fontWeight: 700 }}>New</span>
-            </div>
-            <span style={{ fontSize: 14, fontFamily: "'Nunito',sans-serif", fontWeight: 700, color: "var(--text-dim)" }}>
-              Add Player
-            </span>
+            <span style={{ fontSize: 28, lineHeight: 1 }}>+</span>
+            <span style={{ fontSize: 11, fontFamily: "'Nunito',sans-serif", fontWeight: 700 }}>New</span>
           </div>
-        )}
+          <span style={{
+            fontSize: 13, fontFamily: "'Nunito',sans-serif",
+            fontWeight: 700, color: "var(--text-dim)",
+          }}>Add Profile</span>
+        </div>
       </div>
 
-      {/* Actions */}
-      <div style={{
-        marginTop: 40, display: "flex", gap: 12, position: "relative", zIndex: 1,
-        alignItems: "center", flexWrap: "wrap", justifyContent: "center",
-      }}>
-        {(selected || true) && !managing && (
-          <button
-            className="btn btn-sky"
-            style={{ padding: "14px 44px", fontSize: 17 }}
-            onClick={handleContinue}
-          >
-            {selected === "guest" ? "Play as Guest →" : "Let's Play →"}
-          </button>
-        )}
-        {profiles.length > 0 && (
-          <button
-            className="btn btn-ghost"
-            style={{
-              padding: "14px 20px", fontSize: 14,
-              borderColor: managing ? "rgba(239,68,68,0.4)" : undefined,
-              color: managing ? "#F87171" : undefined,
-            }}
-            onClick={() => setManaging(!managing)}
-          >
-            {managing ? "Done" : "Manage"}
-          </button>
-        )}
+      {/* Continue button */}
+      <div style={{ marginTop: 44, position: "relative", zIndex: 1 }}>
+        <button
+          className="btn btn-sky"
+          style={{ padding: "15px 52px", fontSize: 17 }}
+          onClick={handleContinue}
+        >
+          {selected === "guest" ? "Play as Guest →" : "Let's Play →"}
+        </button>
       </div>
+    </div>
+  );
+}
+
+// ── ProfileCard ────────────────────────────────────────────────────────────────
+function ProfileCard({
+  isSelected, color, label, dashed = false, delay, onClick, onDoubleClick, children,
+}: {
+  isSelected: boolean; color: string; label: string; dashed?: boolean;
+  delay: number; onClick: () => void; onDoubleClick: () => void; children: React.ReactNode;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      style={{
+        display: "flex", flexDirection: "column", alignItems: "center",
+        gap: 10, cursor: "pointer",
+        animation: `cardIn 0.35s ease-out ${delay}s both`,
+      }}
+    >
+      <div style={{
+        width: 110, height: 140, borderRadius: 20,
+        background: isSelected
+          ? `radial-gradient(circle at 50% 35%, ${color}25 0%, rgba(18,14,46,0.8) 80%)`
+          : "rgba(255,255,255,0.03)",
+        border: `2px ${dashed && !isSelected ? "dashed" : "solid"} ${isSelected ? color : dashed ? "rgba(255,255,255,0.18)" : "var(--border)"}`,
+        boxShadow: isSelected ? `0 0 32px ${color}30, 0 8px 30px rgba(0,0,0,0.4)` : "0 4px 20px rgba(0,0,0,0.3)",
+        display: "flex", alignItems: "flex-end", justifyContent: "center",
+        paddingBottom: 4,
+        transform: isSelected ? "scale(1.06)" : "scale(1)",
+        transition: "all 0.2s ease", overflow: "hidden",
+      }}>
+        {children}
+      </div>
+      <div style={{
+        fontFamily: "'Nunito', sans-serif", fontWeight: 700, fontSize: 14,
+        color: isSelected ? "var(--text)" : "var(--text-mid)", transition: "all 0.2s",
+      }}>
+        {label}
+      </div>
+      {isSelected && (
+        <div style={{
+          width: 7, height: 7, borderRadius: "50%",
+          background: color, boxShadow: `0 0 10px ${color}`,
+          animation: "dotPulse 1.5s ease-in-out infinite",
+        }} />
+      )}
     </div>
   );
 }

@@ -142,15 +142,16 @@ export function ConsoleHomeView({
     if (controllerCount > 0) setBtPhase("idle");
   }, [controllerCount]);
 
-  // Keyboard shortcut to start pairing when there's no controller yet.
+  // Keyboard shortcut to start pairing (useful when no controller present).
   useEffect(() => {
-    if (controllerCount > 0) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === "Enter" || e.code === "Space") { e.preventDefault(); startPairing(); }
+      if (btPhase === "idle" && (e.code === "Enter" || e.code === "Space")) {
+        e.preventDefault(); startPairing();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [controllerCount, startPairing]);
+  }, [btPhase, startPairing]);
 
   // ── Update check ─────────────────────────────────────────────────────────────
   const [updateInfo, setUpdateInfo] = useState<{ latestMessage?: string } | null>(null);
@@ -662,48 +663,6 @@ export function ConsoleHomeView({
             </div>
           </div>
 
-          {/* Bluetooth pairing card — visible when no controller is connected */}
-          {controllerCount === 0 && (
-            <div className="glass" style={{ borderRadius: 22, padding: isMobile ? 16 : 20, flexShrink: 0 }}>
-              <div className="nunito" style={{
-                fontSize: 10, fontWeight: 700, color: "var(--text-dim)",
-                letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12,
-              }}>
-                Controller
-              </div>
-              {btPhase === "idle" ? (
-                <>
-                  <div style={{ fontSize: 12, color: "var(--text-mid)", lineHeight: 1.7, marginBottom: 14 }}>
-                    No controller detected. Hold your Xbox button + pair button until the logo flashes, then tap below.
-                  </div>
-                  <button
-                    onClick={startPairing}
-                    className="btn btn-sky nunito"
-                    style={{ width: "100%", padding: "11px", fontSize: 14 }}
-                  >
-                    Start Pairing
-                  </button>
-                  <div className="nunito" style={{ fontSize: 10, color: "var(--text-dim)", textAlign: "center", marginTop: 8 }}>
-                    or press Enter / Space on a keyboard
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontSize: 12, color: "var(--text-mid)", lineHeight: 1.7, marginBottom: 8 }}>
-                    Put your controller in pairing mode now…
-                  </div>
-                  <div className="nunito" style={{
-                    fontSize: 40, fontWeight: 900, color: "var(--sky-light)",
-                    textAlign: "center", fontVariantNumeric: "tabular-nums",
-                    animation: "dotPulse 1s ease-in-out infinite",
-                  }}>
-                    {btSecsLeft}s
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
           {/* Players card */}
           <div className="glass" style={{
             borderRadius: 22, padding: isMobile ? 16 : 22,
@@ -726,12 +685,61 @@ export function ConsoleHomeView({
                 {room.players.length} / 4
               </span>
             </div>
-            {controllerCount > 0 && room.players.length < 4 && (
+            {/* ── Bluetooth controller row ────────────────────────── */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10,
+              marginBottom: 14, paddingBottom: 14,
+              borderBottom: "1px solid rgba(255,255,255,0.07)",
+            }}>
+              {/* Status dot + label */}
+              <div style={{
+                width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
+                background: controllerCount > 0 ? "#34D399" : "rgba(255,255,255,0.2)",
+                boxShadow: controllerCount > 0 ? "0 0 8px #34D39988" : "none",
+                animation: btPhase === "scanning" ? "dotPulse 0.8s ease-in-out infinite" : "none",
+              }} />
+              <span className="nunito" style={{ fontSize: 12, fontWeight: 700, color: "var(--text-mid)", flex: 1 }}>
+                {btPhase === "scanning"
+                  ? `Searching… ${btSecsLeft}s`
+                  : controllerCount > 0
+                  ? `${controllerCount} controller${controllerCount > 1 ? "s" : ""} connected`
+                  : "No controller"}
+              </span>
+              {/* Pair button */}
+              <button
+                onClick={startPairing}
+                disabled={btPhase === "scanning"}
+                className="nunito"
+                style={{
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  borderRadius: 100, padding: "5px 13px",
+                  fontSize: 11, fontWeight: 700,
+                  color: btPhase === "scanning" ? "var(--text-dim)" : "var(--text-mid)",
+                  cursor: btPhase === "scanning" ? "default" : "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                {btPhase === "scanning" ? "Scanning…" : controllerCount > 0 ? "Pair another" : "Pair controller"}
+              </button>
+            </div>
+
+            {btPhase === "scanning" && (
+              <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 12, lineHeight: 1.6 }}>
+                Hold the Xbox button + pair button until the logo flashes rapidly.
+              </div>
+            )}
+            {btPhase === "idle" && controllerCount === 0 && (
+              <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 12, lineHeight: 1.6 }}>
+                Hold Xbox + pair until logo flashes, then tap "Pair controller".
+              </div>
+            )}
+            {controllerCount > 0 && btPhase === "idle" && room.players.length < 4 && (
               <div className="nunito" style={{
                 fontSize: 11, color: "var(--text-dim)", marginBottom: 12,
                 display: "flex", alignItems: "center", gap: 6,
               }}>
-                <span>🎮</span> Press a button on another controller to add a player
+                Press a button on another controller to add a player.
               </div>
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>

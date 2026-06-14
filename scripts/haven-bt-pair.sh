@@ -1,50 +1,78 @@
 #!/bin/bash
 # Haven — Bluetooth controller pairing.
 # Launched in the background via systemd-run by POST /api/bt/scan.
-# Put the controller in pairing mode before this script starts.
-# Scans for up to 30 seconds, then pairs, trusts, and connects the first
-# gamepad-class device it finds.
+# Hands off to Python immediately so we can keep a single interactive
+# bluetoothctl session alive (the agent MUST stay running during pairing).
+exec python3 - << 'PYEOF'
+import subprocess, re, sys, time, threading
 
-set -uo pipefail
+TIMEOUT = 45
+# Common gamepad names reported by bluetoothctl.
+GAMEPAD_RE = re.compile(
+    r'Xbox|Wireless Controller|DualShock|DualSense|Pro Controller|Gamepad|Joy-Con',
+    re.IGNORECASE,
+)
+# Matches both "[NEW] Device AA:BB:CC:DD:EE:FF Name" and "Device AA:BB:CC:DD:EE:FF Name"
+DEVICE_RE = re.compile(r'Device\s+([0-9A-Fa-f:]{17})\s+(.*)')
 
-SCAN_SECS=30
+proc = subprocess.Popen(
+    ['bluetoothctl'],
+    stdin=subprocess.PIPE,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    text=True,
+    bufsize=1,
+)
 
-rfkill unblock bluetooth 2>/dev/null || true
-bluetoothctl power on           2>/dev/null || true
-# NoInputNoOutput agent auto-accepts pairing with no PIN — correct for gamepads.
-bluetoothctl agent NoInputNoOutput 2>/dev/null || true
-bluetoothctl default-agent        2>/dev/null || true
-bluetoothctl scan on              2>/dev/null || true
+found_mac   = [None]
+found_event = threading.Event()
 
-FOUND_MAC=""
-DEADLINE=$((SECONDS + SCAN_SECS))
+def _reader():
+    """Read bluetoothctl output line-by-line; signal when a gamepad appears."""
+    for raw in proc.stdout:
+        line = raw.rstrip()
+        print(line, flush=True)
+        m = DEVICE_RE.search(line)
+        if m and not found_mac[0]:
+            mac, name = m.group(1), m.group(2).strip()
+            if GAMEPAD_RE.search(name):
+                found_mac[0] = mac
+                found_event.set()
 
-while [[ $SECONDS -lt $DEADLINE && -z "$FOUND_MAC" ]]; do
-  while IFS= read -r line; do
-    MAC=$(echo "$line" | awk '{print $2}')
-    # Skip anything that doesn't look like a MAC address.
-    [[ $MAC =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]] || continue
-    NAME=$(echo "$line" | cut -d' ' -f3-)
-    INFO=$(bluetoothctl info "$MAC" 2>/dev/null)
-    # Match on the HID gamepad device class or well-known controller names.
-    if echo "$INFO" | grep -qE "Icon: input-gamepad|UUID: Human Interface Device" || \
-       echo "$NAME" | grep -qiE "Xbox|Wireless Controller|DualShock|DualSense|Pro Controller|Gamepad"; then
-      FOUND_MAC="$MAC"
-      break
-    fi
-  done < <(bluetoothctl devices 2>/dev/null)
-  sleep 1
-done
+threading.Thread(target=_reader, daemon=True).start()
 
-bluetoothctl scan off 2>/dev/null || true
+def send(cmd, delay=0.6):
+    proc.stdin.write(cmd + '\n')
+    proc.stdin.flush()
+    time.sleep(delay)
 
-if [[ -z "$FOUND_MAC" ]]; then
-  echo "[bt-pair] no controller found after ${SCAN_SECS}s — make sure it's in pairing mode" >&2
-  exit 1
-fi
+# Bring up the adapter and register a no-PIN agent (required for gamepads).
+send('power on', 1.0)
+send('agent NoInputNoOutput', 0.5)
+send('default-agent', 0.5)
+send('scan on', 1.0)
 
-echo "[bt-pair] found $FOUND_MAC, pairing..."
-bluetoothctl pair    "$FOUND_MAC" 2>/dev/null || true
-bluetoothctl trust   "$FOUND_MAC"
-bluetoothctl connect "$FOUND_MAC" 2>/dev/null || true
-echo "[bt-pair] done: $FOUND_MAC"
+# Periodically request the device list so we also catch controllers that were
+# already discovered before we started scanning.
+scan_start = time.time()
+while time.time() - scan_start < TIMEOUT and not found_event.is_set():
+    send('devices', 1.5)
+
+send('scan off', 0.5)
+
+mac = found_mac[0]
+if not mac:
+    print(f'[bt-pair] no controller found after {TIMEOUT}s — make sure it is in pairing mode', file=sys.stderr)
+    send('quit', 0.3)
+    proc.stdin.close()
+    sys.exit(1)
+
+print(f'[bt-pair] found {mac}, pairing...', flush=True)
+send(f'pair {mac}',    4.0)   # allow time for the handshake
+send(f'trust {mac}',   1.0)
+send(f'connect {mac}', 2.0)
+send('quit', 0.3)
+proc.stdin.close()
+proc.wait(timeout=5)
+print(f'[bt-pair] done: {mac}', flush=True)
+PYEOF

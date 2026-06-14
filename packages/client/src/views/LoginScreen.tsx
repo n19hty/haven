@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useProfiles, Profile } from "../hooks/useProfiles";
+import { useProfiles, Profile, GUEST_PROFILE } from "../hooks/useProfiles";
 import { Character, CharacterConfig, DEFAULT_CHARACTER } from "../components/Character";
 import { CharacterCreator } from "../components/CharacterCreator";
 import { SkyBackground } from "../components/SkyBackground";
@@ -13,7 +13,8 @@ type Screen = "pick" | "create" | "edit";
 
 export function LoginScreen({ onLogin }: Props) {
   const { profiles, addProfile, updateProfile, removeProfile } = useProfiles();
-  const [selected, setSelected]   = useState<string | null>(profiles[0]?.id ?? null);
+  // Default to guest when no saved profiles exist so pressing A starts immediately.
+  const [selected, setSelected]   = useState<string | null>(profiles[0]?.id ?? "guest");
   const [screen, setScreen]       = useState<Screen>("pick");
   const [editTarget, setEditTarget] = useState<string | null>(null);
   const [newName, setNewName]     = useState("");
@@ -42,23 +43,27 @@ export function LoginScreen({ onLogin }: Props) {
   }
 
   function handleContinue() {
+    if (selected === "guest") { onLogin(GUEST_PROFILE); return; }
     const p = profiles.find((x) => x.id === selected) ?? profiles[0];
     if (p) onLogin(p);
   }
 
-  // Controller navigation of the profile picker: d-pad selects, A continues.
+  // Controller navigation: d-pad selects, A continues, B exits character creator.
   useGamepads((e) => {
-    if (screen !== "pick" || managing || profiles.length === 0) return;
-    if (e.control === "confirm") {
-      handleContinue();
+    if (e.control === "back" && (screen === "create" || screen === "edit")) {
+      setScreen("pick"); setEditTarget(null);
       return;
     }
+    if (screen !== "pick" || managing) return;
+    if (e.control === "confirm") { handleContinue(); return; }
     if (e.control === "left" || e.control === "right") {
-      const idx = Math.max(0, profiles.findIndex((p) => p.id === selected));
+      // Navigation order: saved profiles … Guest
+      const allIds = [...profiles.map((p) => p.id), "guest"];
+      const idx = Math.max(0, allIds.indexOf(selected ?? "guest"));
       const next = e.control === "left"
         ? Math.max(0, idx - 1)
-        : Math.min(profiles.length - 1, idx + 1);
-      setSelected(profiles[next].id);
+        : Math.min(allIds.length - 1, idx + 1);
+      setSelected(allIds[next]);
     }
   });
 
@@ -265,6 +270,48 @@ export function LoginScreen({ onLogin }: Props) {
           );
         })}
 
+        {/* Guest */}
+        {!managing && (() => {
+          const isSelected = selected === "guest";
+          return (
+            <div
+              onClick={() => setSelected("guest")}
+              onDoubleClick={handleContinue}
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "center",
+                gap: 10, cursor: "pointer",
+                animation: `cardIn 0.35s ease-out ${profiles.length * 0.07}s both`,
+              }}
+            >
+              <div style={{
+                width: 110, height: 140, borderRadius: 20,
+                background: isSelected
+                  ? "radial-gradient(circle at 50% 35%, rgba(107,114,128,0.2) 0%, rgba(18,14,46,0.8) 80%)"
+                  : "rgba(255,255,255,0.02)",
+                border: `2px ${isSelected ? "solid rgba(156,163,175,0.8)" : "dashed rgba(255,255,255,0.2)"}`,
+                boxShadow: isSelected ? "0 0 30px rgba(107,114,128,0.2), 0 8px 30px rgba(0,0,0,0.4)" : "0 4px 20px rgba(0,0,0,0.3)",
+                display: "flex", alignItems: "flex-end", justifyContent: "center",
+                paddingBottom: 4,
+                transform: isSelected ? "scale(1.06)" : "scale(1)",
+                transition: "all 0.2s ease", overflow: "hidden", position: "relative",
+              }}>
+                <Character config={DEFAULT_CHARACTER} size={90} />
+              </div>
+              <div style={{
+                fontFamily: "'Nunito', sans-serif", fontWeight: 700, fontSize: 14,
+                color: isSelected ? "var(--text)" : "var(--text-mid)", transition: "all 0.2s",
+              }}>Guest</div>
+              {isSelected && (
+                <div style={{
+                  width: 8, height: 8, borderRadius: "50%",
+                  background: "#6B7280", boxShadow: "0 0 10px #6B7280",
+                  animation: "dotPulse 1.5s ease-in-out infinite",
+                }} />
+              )}
+            </div>
+          );
+        })()}
+
         {/* Create new */}
         {!managing && (
           <div
@@ -309,13 +356,13 @@ export function LoginScreen({ onLogin }: Props) {
         marginTop: 40, display: "flex", gap: 12, position: "relative", zIndex: 1,
         alignItems: "center", flexWrap: "wrap", justifyContent: "center",
       }}>
-        {selected && !managing && (
+        {(selected || true) && !managing && (
           <button
             className="btn btn-sky"
             style={{ padding: "14px 44px", fontSize: 17 }}
             onClick={handleContinue}
           >
-            Let's Play →
+            {selected === "guest" ? "Play as Guest →" : "Let's Play →"}
           </button>
         )}
         {profiles.length > 0 && (

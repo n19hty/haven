@@ -8,6 +8,14 @@ export interface Profile {
   character: CharacterConfig;
 }
 
+// Ephemeral profile — not saved to localStorage.
+export const GUEST_PROFILE: Profile = {
+  id: "guest",
+  name: "Guest",
+  color: "#6B7280",
+  character: DEFAULT_CHARACTER,
+};
+
 const COLORS = ["#A78BFA","#F59E0B","#34D399","#FB7185","#60A5FA","#EC4899","#FBBF24"];
 const KEY    = "haven-profiles";
 

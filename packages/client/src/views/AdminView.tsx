@@ -34,6 +34,12 @@ export function AdminView() {
     setTimeout(refresh, 8000);
   }
 
+  async function pairController() {
+    setBusy("Pairing mode active for 30 seconds — put your controller in pairing mode now.");
+    try { await fetch("/api/bt/scan", { method: "POST" }); } catch {}
+    setTimeout(() => setBusy(null), 31000);
+  }
+
   return (
     <div style={{
       minHeight: "100dvh", background: "#070B1E", color: "#EEF4FF",
@@ -56,6 +62,9 @@ export function AdminView() {
       </button>
       <button onClick={() => run("rollback")} disabled={!!busy} style={btn("transparent", "#FCA5A5", "#EF4444")}>
         Roll back to previous
+      </button>
+      <button onClick={pairController} disabled={!!busy} style={btn("transparent", "#86EFAC", "#22C55E40")}>
+        Pair Bluetooth controller
       </button>
       <button onClick={refresh} style={{ ...btn("transparent", "#9FB3C8", "#33415540"), fontSize: 14, padding: "10px 18px" }}>
         Refresh

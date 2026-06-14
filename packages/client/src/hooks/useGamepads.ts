@@ -9,12 +9,21 @@ import { ControllerControl } from "../games/registry";
 // is the whole reason we don't flood the socket: one event per real press, not
 // 60/sec while a button is held. The two pure functions below are unit-tested.
 
-// Button → control. Standard mapping (https://w3c.github.io/gamepad/#remapping)
-// puts the accept button at index 0, but many Bluetooth pads report a
-// non-standard mapping (gamepad.mapping === "") with the accept button at index
-// 1. We treat BOTH primary face buttons as "confirm" — we don't bind a separate
-// cancel yet, so there's no ambiguity, and it works across both mappings.
-const BUTTON_CONTROLS: Record<number, ControllerControl> = {
+// Standard Gamepad API mapping (Xbox One/Series, DualShock 4/5, and any pad that
+// reports gamepad.mapping === "standard"). Button 1 is B/Circle = back/cancel.
+const STANDARD_BUTTON_CONTROLS: Record<number, ControllerControl> = {
+  0: "confirm",   // A / Cross
+  1: "back",      // B / Circle
+  12: "up",
+  13: "down",
+  14: "left",
+  15: "right",
+};
+
+// Generic / non-standard Bluetooth pads (gamepad.mapping === ""). Layout is
+// unknown so both primary face buttons map to confirm — no ambiguity since we
+// can't tell which is "back" without a known layout.
+const NONSTANDARD_BUTTON_CONTROLS: Record<number, ControllerControl> = {
   0: "confirm",
   1: "confirm",
   12: "up",
@@ -22,7 +31,8 @@ const BUTTON_CONTROLS: Record<number, ControllerControl> = {
   14: "left",
   15: "right",
 };
-// Home is a chord: Select(8) + Start(9) held together (classic console exit combo).
+
+// Home chord: Select(8) + Start(9) pressed simultaneously (classic console exit).
 const HOME_CHORD = [8, 9];
 const AXIS_THRESHOLD = 0.5;
 
@@ -38,17 +48,21 @@ function isDown(b?: { pressed: boolean; value: number }): boolean {
 interface GamepadSnapshot {
   buttons: ReadonlyArray<{ pressed: boolean; value: number }>;
   axes: ReadonlyArray<number>;
+  mapping?: string; // "standard" for Xbox/DualShock; "" or absent for generic pads
 }
 
 /** The set of controls currently active for one gamepad snapshot. Pure. */
 export function activeControls(gp: GamepadSnapshot): Set<ControllerControl> {
   const s = new Set<ControllerControl>();
+  const map = gp.mapping === "standard" ? STANDARD_BUTTON_CONTROLS : NONSTANDARD_BUTTON_CONTROLS;
   gp.buttons.forEach((b, i) => {
-    const c = BUTTON_CONTROLS[i];
+    const c = map[i];
     if (c && (b.pressed || b.value > 0.5)) s.add(c);
   });
-  // Home = Select(8) + Start(9) pressed together.
+  // Home: chord (Select+Start) works on all controllers.
   if (HOME_CHORD.every((i) => isDown(gp.buttons[i]))) s.add("home");
+  // Guide/Xbox button (index 16) also triggers home on standard-mapped controllers.
+  if (gp.mapping === "standard" && isDown(gp.buttons[16])) s.add("home");
   const x = gp.axes[0];
   const y = gp.axes[1];
   if (typeof x === "number") {

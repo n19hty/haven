@@ -32,8 +32,8 @@ export function GameStage({ roomState, myPlayer, onAction, onRematch, onBackToLo
     return controllerInput((e) => {
       // Only the console/host pad drives these menus.
       if (!isHostRef.current || e.playerId !== myIdRef.current) return;
-      // Home (Select+Start) always returns to the lobby.
-      if (e.control === "home") { cbRef.current.onBackToLobby(); return; }
+      // Home (Select+Start chord, or Guide button) and Back (B button) both return to lobby.
+      if (e.control === "home" || e.control === "back") { cbRef.current.onBackToLobby(); return; }
       if (phaseRef.current === "results") {
         if (e.control === "left" || e.control === "up") setResultsFocus(0);
         else if (e.control === "right" || e.control === "down") setResultsFocus(1);
@@ -129,7 +129,7 @@ export function GameStage({ roomState, myPlayer, onAction, onRematch, onBackToLo
           position: "absolute", bottom: 16, zIndex: 1,
           fontSize: 12, fontWeight: 700, color: "var(--text-dim)",
         }}>
-          Home (Select + Start) → lobby
+          B · back to lobby
         </div>
       )}
     </div>

@@ -37,7 +37,11 @@ while true; do
     --disable-infobars \
     --disable-session-crashed-bubble \
     --disable-restore-session-state \
+    --no-first-run \
     --check-for-update-interval=31536000 \
+    --disable-dev-shm-usage \
+    --ignore-gpu-blocklist \
+    --enable-gpu-rasterization \
     "http://localhost:$PORT" || true
   # cage exited (crash, or an update killed it) — relaunch with the new build.
   sleep 1

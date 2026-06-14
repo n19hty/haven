@@ -13,9 +13,11 @@ In development the client runs under Vite on :3000 and proxies /api and
 
 from __future__ import annotations
 
+import asyncio
 import os
 import socket
 import subprocess
+import time
 from pathlib import Path
 
 import socketio
@@ -116,6 +118,65 @@ async def update():
 @api.post("/api/rollback")
 async def rollback():
     return {"started": _run_detached("haven-rollback.sh")}
+
+
+# Cache the last fetch result so rapid polls don't hammer git.
+_update_cache: dict = {}
+_UPDATE_CACHE_TTL = 1800  # 30 minutes
+
+
+@api.get("/api/check-update")
+async def check_update():
+    """Fetch origin/main and report whether a newer commit is available.
+
+    git fetch is a blocking network call so we run it in a thread to avoid
+    stalling the event loop. Results are cached for 30 minutes."""
+    now = time.time()
+    if _update_cache.get("ts", 0) + _UPDATE_CACHE_TTL > now:
+        return _update_cache["result"]
+
+    def _do_check() -> dict:
+        try:
+            subprocess.run(
+                ["git", "-C", str(_REPO_ROOT), "fetch", "origin", "main", "--quiet"],
+                timeout=15, stderr=subprocess.DEVNULL, check=False,
+            )
+        except Exception:
+            pass  # no network — return cached or upToDate
+        local  = _git("rev-parse", "HEAD")
+        remote = _git("rev-parse", "origin/main")
+        msg    = _git("log", "-1", "--pretty=%s", "origin/main")
+        if local and remote:
+            return {
+                "upToDate":      local == remote,
+                "currentCommit": local[:7],
+                "latestCommit":  remote[:7],
+                "latestMessage": msg,
+            }
+        return {"upToDate": True, "error": "git unavailable"}
+
+    result = await asyncio.to_thread(_do_check)
+    _update_cache["ts"]     = time.time()
+    _update_cache["result"] = result
+    return result
+
+
+@api.post("/api/bt/scan")
+async def bt_scan():
+    """Start a 30-second Bluetooth scan window to pair a new controller."""
+    return {"started": _run_detached("haven-bt-pair.sh")}
+
+
+@api.get("/api/bt/devices")
+async def bt_devices():
+    """List Bluetooth devices known to this machine."""
+    try:
+        out = subprocess.check_output(
+            ["bluetoothctl", "devices"], text=True, stderr=subprocess.DEVNULL, timeout=5
+        )
+        return {"devices": [ln.strip() for ln in out.splitlines() if ln.strip()]}
+    except Exception:
+        return {"devices": []}
 
 
 # Serve the built client in production. packages/client/dist is created by

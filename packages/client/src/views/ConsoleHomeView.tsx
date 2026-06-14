@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { RoomState, Player, GameMeta } from "@haven/shared";
 import { Character } from "../components/Character";
@@ -114,6 +114,64 @@ export function ConsoleHomeView({
       }
     });
   }, [controllerInput]);
+
+  // ── Bluetooth pairing ────────────────────────────────────────────────────────
+  const [btPhase, setBtPhase] = useState<"idle" | "scanning">("idle");
+  const [btSecsLeft, setBtSecsLeft] = useState(30);
+
+  const startPairing = useCallback(async () => {
+    try { await fetch("/api/bt/scan", { method: "POST" }); } catch { /* server may be unreachable */ }
+    setBtPhase("scanning");
+    setBtSecsLeft(30);
+  }, []);
+
+  // Countdown while scanning.
+  useEffect(() => {
+    if (btPhase !== "scanning") return;
+    const t = setInterval(() => {
+      setBtSecsLeft((s) => {
+        if (s <= 1) { clearInterval(t); setBtPhase("idle"); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [btPhase]);
+
+  // Dismiss when a controller appears.
+  useEffect(() => {
+    if (controllerCount > 0) setBtPhase("idle");
+  }, [controllerCount]);
+
+  // Keyboard shortcut to start pairing when there's no controller yet.
+  useEffect(() => {
+    if (controllerCount > 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === "Enter" || e.code === "Space") { e.preventDefault(); startPairing(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [controllerCount, startPairing]);
+
+  // ── Update check ─────────────────────────────────────────────────────────────
+  const [updateInfo, setUpdateInfo] = useState<{ latestMessage?: string } | null>(null);
+  const [updating, setUpdating]     = useState(false);
+
+  useEffect(() => {
+    const check = () =>
+      fetch("/api/check-update")
+        .then((r) => r.json())
+        .then((d) => { if (!d.upToDate && !d.error) setUpdateInfo(d); })
+        .catch(() => {});
+    check();
+    const t = setInterval(check, 30 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  async function handleUpdate() {
+    setUpdateInfo(null);
+    setUpdating(true);
+    try { await fetch("/api/update", { method: "POST" }); } catch { /* server restarts */ }
+  }
 
   const { w }    = useViewport();
   const isMobile = w < 900;
@@ -235,6 +293,79 @@ export function ConsoleHomeView({
           background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3) 30%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0.3) 70%, transparent)",
         }} />
       </div>
+
+      {/* ── Update available banner ──────────────────────────────────── */}
+      {updateInfo && !updating && (
+        <div style={{
+          position: "relative", zIndex: 20, flexShrink: 0,
+          background: "rgba(56,189,248,0.08)",
+          borderBottom: "1px solid rgba(56,189,248,0.22)",
+          backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+          display: "flex", alignItems: "center",
+          padding: isMobile ? "10px 16px" : "10px 28px", gap: 12,
+          animation: "slideUp 0.35s ease-out",
+        }}>
+          <div style={{
+            width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
+            background: "var(--sky)", boxShadow: "0 0 8px var(--sky)",
+            animation: "dotPulse 2s ease-in-out infinite",
+          }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span className="nunito" style={{ fontWeight: 800, fontSize: 13, color: "var(--sky-light)" }}>
+              Update available
+            </span>
+            {updateInfo.latestMessage && (
+              <span style={{ fontSize: 12, color: "var(--text-mid)", marginLeft: 10 }}>
+                {updateInfo.latestMessage}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={handleUpdate}
+            className="nunito"
+            style={{
+              background: "var(--sky)", color: "#0B0C0E",
+              border: "none", borderRadius: 100,
+              padding: "7px 18px", fontSize: 12, fontWeight: 800, cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >Update Now</button>
+          <button
+            onClick={() => setUpdateInfo(null)}
+            className="nunito"
+            style={{
+              background: "rgba(255,255,255,0.05)", color: "var(--text-mid)",
+              border: "1px solid rgba(255,255,255,0.12)", borderRadius: 100,
+              padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >Later</button>
+        </div>
+      )}
+
+      {/* ── Updating overlay ─────────────────────────────────────────── */}
+      {updating && (
+        <div style={{
+          position: "absolute", inset: 0, zIndex: 50,
+          background: "rgba(11,12,14,0.92)", backdropFilter: "blur(10px)",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", gap: 16,
+          animation: "fadeIn 0.3s ease-out",
+        }}>
+          <div className="nunito" style={{
+            fontSize: 32, fontWeight: 900, color: "var(--text)",
+            textShadow: "0 0 30px rgba(255,255,255,0.3)",
+          }}>
+            Updating Haven…
+          </div>
+          <div style={{ fontSize: 14, color: "var(--text-mid)" }}>
+            The console will rebuild and restart automatically.
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 4 }}>
+            This takes 1–3 minutes on a Pi 5.
+          </div>
+        </div>
+      )}
 
       {/* ── Main content ─────────────────────────────────────────────── */}
       <div style={{
@@ -530,6 +661,48 @@ export function ConsoleHomeView({
               </div>
             </div>
           </div>
+
+          {/* Bluetooth pairing card — visible when no controller is connected */}
+          {controllerCount === 0 && (
+            <div className="glass" style={{ borderRadius: 22, padding: isMobile ? 16 : 20, flexShrink: 0 }}>
+              <div className="nunito" style={{
+                fontSize: 10, fontWeight: 700, color: "var(--text-dim)",
+                letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12,
+              }}>
+                Controller
+              </div>
+              {btPhase === "idle" ? (
+                <>
+                  <div style={{ fontSize: 12, color: "var(--text-mid)", lineHeight: 1.7, marginBottom: 14 }}>
+                    No controller detected. Hold your Xbox button + pair button until the logo flashes, then tap below.
+                  </div>
+                  <button
+                    onClick={startPairing}
+                    className="btn btn-sky nunito"
+                    style={{ width: "100%", padding: "11px", fontSize: 14 }}
+                  >
+                    Start Pairing
+                  </button>
+                  <div className="nunito" style={{ fontSize: 10, color: "var(--text-dim)", textAlign: "center", marginTop: 8 }}>
+                    or press Enter / Space on a keyboard
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 12, color: "var(--text-mid)", lineHeight: 1.7, marginBottom: 8 }}>
+                    Put your controller in pairing mode now…
+                  </div>
+                  <div className="nunito" style={{
+                    fontSize: 40, fontWeight: 900, color: "var(--sky-light)",
+                    textAlign: "center", fontVariantNumeric: "tabular-nums",
+                    animation: "dotPulse 1s ease-in-out infinite",
+                  }}>
+                    {btSecsLeft}s
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Players card */}
           <div className="glass" style={{

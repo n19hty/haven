@@ -280,8 +280,8 @@ async def game_select(sid, game_id):
 
 
 @sio.on("game:start")
-async def game_start(sid):
-    code = rm.start_game(sid)
+async def game_start(sid, vs_ai=False):
+    code = rm.start_game(sid, vs_ai=bool(vs_ai))
     if code:
         await broadcast(code)
 

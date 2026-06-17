@@ -80,7 +80,7 @@ export function App() {
   return (
     <>
       {store.error && <Err msg={store.error} onClose={() => store.setError(null)} />}
-      <TVView roomState={store.roomState} myPlayer={store.myPlayer} profile={activeProfile} games={games} />
+      <TVView roomState={store.roomState} myPlayer={store.myPlayer} games={games} />
     </>
   );
 }

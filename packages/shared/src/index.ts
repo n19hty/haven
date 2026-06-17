@@ -62,7 +62,7 @@ export interface ClientToServerEvents {
 
   // Game lifecycle (host only)
   "game:select": (gameId: string) => void;
-  "game:start": () => void;
+  "game:start": (vsAI?: boolean) => void;
   "game:rematch": () => void;
   "game:back-to-lobby": () => void;
 

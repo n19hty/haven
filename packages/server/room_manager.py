@@ -269,7 +269,7 @@ def select_game(socket_id: str, game_id: str) -> Optional[str]:
     return code
 
 
-def _start_or_rematch(socket_id: str) -> Optional[str]:
+def _start_or_rematch(socket_id: str, vs_ai: bool = False) -> Optional[str]:
     code = _socket_to_room.get(socket_id)
     if not code:
         return None
@@ -282,6 +282,14 @@ def _start_or_rematch(socket_id: str) -> Optional[str]:
     if not game:
         return None
 
+    # Auto-add AI when the host is the only human and the game supports it.
+    if vs_ai and not internal.ai_player_ids and game.get_ai_move:
+        human = [p for p in internal.room["players"] if not p.get("isAI")]
+        if len(human) == 1:
+            ai_player = _add_player(internal, "Computer")
+            ai_player["isAI"] = True
+            internal.ai_player_ids.add(ai_player["id"])
+
     player_ids = [p["id"] for p in internal.room["players"]]
     internal.game_state = game.create_initial_state(player_ids)
     internal.game_player_ids = player_ids
@@ -291,8 +299,8 @@ def _start_or_rematch(socket_id: str) -> Optional[str]:
     return code
 
 
-def start_game(socket_id: str) -> Optional[str]:
-    return _start_or_rematch(socket_id)
+def start_game(socket_id: str, vs_ai: bool = False) -> Optional[str]:
+    return _start_or_rematch(socket_id, vs_ai=vs_ai)
 
 
 def rematch(socket_id: str) -> Optional[str]:

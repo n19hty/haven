@@ -251,10 +251,7 @@ export function ConsoleHomeView({
                 return (
                   <button
                     key={item.id}
-                    onClick={() => {
-                      setSelected(i);
-                      if (item.playable && isHost) onLaunch?.(item.id);
-                    }}
+                    onClick={() => setSelected(i)}
                     style={{
                       ...s.tile,
                       borderColor:  isSel ? (item.playable ? "#6366f1" : "rgba(255,255,255,0.3)") : "rgba(255,255,255,0.07)",

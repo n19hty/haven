@@ -104,6 +104,11 @@ export function useGamepads(onEvent: (e: GamepadFrameEvent) => void) {
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.getGamepads) return;
     const prev = new Map<number, Set<ControllerControl>>();
+    // Seed prev from the current snapshot so buttons already held when this
+    // hook mounts don't fire as rising edges on the first frame.
+    for (const gp of navigator.getGamepads()) {
+      if (gp) prev.set(gp.index, activeControls(gp));
+    }
     // `${index}:${control}` -> timestamp of the next allowed repeat.
     const nextRepeat = new Map<string, number>();
     let raf = 0;

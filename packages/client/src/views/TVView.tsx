@@ -44,10 +44,13 @@ export function TVView({ roomState, myPlayer, games }: Props) {
     );
   }
 
+  const gameTitle = games.find((g) => g.id === room.gameId)?.name ?? room.gameId ?? "Game";
+
   return (
     <GameStage
       roomState={roomState}
       myPlayer={myPlayer}
+      gameTitle={gameTitle}
       controllerInput={controllerInput}
       onAction={(a: PlayerAction, playerId?: string) =>
         socket.emit("player:action", a, playerId)

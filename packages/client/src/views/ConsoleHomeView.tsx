@@ -13,6 +13,13 @@ interface Props {
   controllerCount?: number;
 }
 
+const UPCOMING = [
+  { id: "racer",   name: "Night Racer",   icon: "🏎",  color: "#60A5FA", sub: "Racing" },
+  { id: "battle",  name: "Battle Grid",   icon: "⚔️",  color: "#F87171", sub: "Strategy" },
+  { id: "puzzle",  name: "Mind Bender",   icon: "🧩",  color: "#A78BFA", sub: "Puzzle" },
+  { id: "ghost",   name: "Ghost Network", icon: "👻",  color: "#34D399", sub: "Action" },
+];
+
 export function ConsoleHomeView({
   roomState, myPlayer, games = [], isHost = false, onLaunch,
   controllerInput, controllerCount = 0,
@@ -62,25 +69,30 @@ export function ConsoleHomeView({
 
   useEffect(() => { if (controllerCount > 0) setBtPhase("idle"); }, [controllerCount]);
 
-  // ── Controller nav ────────────────────────────────────────────────────────
-  // Only one action in the lobby: confirm = launch. We keep an explicit
-  // "focused" boolean so the button shows a selection ring immediately.
-  const [focused, setFocused] = useState(true);
-  const canLaunchRef = useRef(isHost); canLaunchRef.current = isHost;
-  const onLaunchRef  = useRef(onLaunch);  onLaunchRef.current = onLaunch;
-  const gamesRef     = useRef(games);     gamesRef.current = games;
+  // ── Game shelf + controller nav ───────────────────────────────────────────
+  const allItems = [
+    ...games.map((g) => ({ id: g.id, name: g.name, icon: g.thumbnail ?? "🎮", color: "#6366f1", sub: `${g.minPlayers}–${g.maxPlayers} players`, playable: true })),
+    ...UPCOMING.map((g) => ({ ...g, playable: false })),
+  ];
+
+  const [selected, setSelected] = useState(0);
+  const selectedRef   = useRef(selected); selectedRef.current = selected;
+  const allItemsRef   = useRef(allItems); allItemsRef.current = allItems;
+  const isHostRef     = useRef(isHost);   isHostRef.current   = isHost;
+  const onLaunchRef   = useRef(onLaunch); onLaunchRef.current = onLaunch;
   const startPairingRef = useRef(startPairing); startPairingRef.current = startPairing;
 
   useEffect(() => {
     if (!controllerInput) return;
     return controllerInput((e) => {
-      if (e.control === "confirm" && canLaunchRef.current) {
-        const g = gamesRef.current[0];
-        if (g) onLaunchRef.current?.(g.id);
+      const items = allItemsRef.current;
+      if (e.control === "left")  setSelected((s) => Math.max(0, s - 1));
+      if (e.control === "right") setSelected((s) => Math.min(items.length - 1, s + 1));
+      if (e.control === "confirm") {
+        const item = items[selectedRef.current];
+        if (item?.playable && isHostRef.current) onLaunchRef.current?.(item.id);
       }
       if (e.control === "back") startPairingRef.current();
-      // D-pad still acknowledged — keep focus ring visible
-      if (["up","down","left","right"].includes(e.control)) setFocused(true);
     });
   }, [controllerInput]);
 
@@ -139,8 +151,8 @@ export function ConsoleHomeView({
     return () => clearInterval(t);
   }, [updating]);
 
-  const playableGame = games[0] ?? null;
-  const canStart     = isHost && !!playableGame;
+  const selectedItem = allItems[selected] ?? allItems[0];
+  const canStart     = isHost && !!selectedItem?.playable;
 
   return (
     <div style={s.root}>
@@ -161,9 +173,7 @@ export function ConsoleHomeView({
         <div style={s.banner}>
           <span style={s.bannerDot} />
           <span style={s.bannerLabel}>Update available</span>
-          {updateInfo.latestMessage && (
-            <span style={s.bannerMsg}>{updateInfo.latestMessage}</span>
-          )}
+          {updateInfo.latestMessage && <span style={s.bannerMsg}>{updateInfo.latestMessage}</span>}
           <button onClick={handleUpdate} style={{ ...s.btn, background: "#6366f1", color: "#fff", border: "none" }}>
             Update Now
           </button>
@@ -177,7 +187,7 @@ export function ConsoleHomeView({
         <div style={s.headerRight}>
           {controllerCount > 0 && (
             <span style={s.ctrlBadge}>
-              <span style={s.ctrlDot} /> {controllerCount} controller{controllerCount > 1 ? "s" : ""}
+              <span style={s.ctrlDot} />{controllerCount} controller{controllerCount > 1 ? "s" : ""}
             </span>
           )}
           <span style={s.clock}>{timeStr}</span>
@@ -187,11 +197,11 @@ export function ConsoleHomeView({
       {/* ── Main ────────────────────────────────────────────────────────── */}
       <main style={s.main}>
 
-        {/* Left: QR + code */}
+        {/* Left: QR + join code */}
         <div style={s.leftCol}>
           <p style={s.label}>Scan to join</p>
           <div style={s.qrBox}>
-            <QRCodeSVG value={joinUrl} size={qrSize()} bgColor="#fff" fgColor="#0c0c14" />
+            <QRCodeSVG value={joinUrl} size={qrPx()} bgColor="#fff" fgColor="#0c0c14" />
           </div>
           <div style={s.roomCode}>{room.code}</div>
           <p style={s.joinAddr}>{netAddr}</p>
@@ -200,7 +210,7 @@ export function ConsoleHomeView({
         {/* Divider */}
         <div style={s.divider} />
 
-        {/* Right: players + game */}
+        {/* Right: players + game shelf */}
         <div style={s.rightCol}>
 
           {/* Players */}
@@ -215,7 +225,7 @@ export function ConsoleHomeView({
                   <div key={i} style={{
                     ...s.playerSlot,
                     background: p ? `${col}10` : "rgba(255,255,255,0.02)",
-                    border:     `1px solid ${p ? col + "35" : "rgba(255,255,255,0.07)"}`,
+                    border: `1px solid ${p ? col + "35" : "rgba(255,255,255,0.07)"}`,
                   }}>
                     <div style={{ ...s.dot, background: p ? col : "rgba(255,255,255,0.12)" }} />
                     <div>
@@ -232,42 +242,60 @@ export function ConsoleHomeView({
             </div>
           </div>
 
-          {/* Game */}
+          {/* Game shelf */}
           <div style={s.section}>
-            <p style={s.label}>Game</p>
-            {playableGame ? (
-              <div style={{
-                ...s.gameCard,
-                border: focused && canStart
-                  ? "2px solid #6366f1"
-                  : "1px solid rgba(255,255,255,0.1)",
-                boxShadow: focused && canStart
-                  ? "0 0 0 4px rgba(99,102,241,0.2)"
-                  : "none",
-              }}>
-                <div>
-                  <div style={s.gameName}>{playableGame.name}</div>
-                  <div style={s.gameSub}>
-                    {playableGame.minPlayers}–{playableGame.maxPlayers} players
-                    {room.players.length === 1 ? " · vs Computer" : ""}
-                  </div>
-                </div>
-                {canStart ? (
+            <p style={s.label}>Select Game</p>
+            <div style={s.shelf}>
+              {allItems.map((item, i) => {
+                const isSel = i === selected;
+                return (
                   <button
-                    onClick={() => onLaunch?.(playableGame.id)}
-                    style={{ ...s.launchBtn, ...(focused ? s.launchBtnFocused : {}) }}
+                    key={item.id}
+                    onClick={() => {
+                      setSelected(i);
+                      if (item.playable && isHost) onLaunch?.(item.id);
+                    }}
+                    style={{
+                      ...s.tile,
+                      borderColor:  isSel ? (item.playable ? "#6366f1" : "rgba(255,255,255,0.3)") : "rgba(255,255,255,0.07)",
+                      background:   isSel ? (item.playable ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.06)") : "rgba(255,255,255,0.03)",
+                      boxShadow:    isSel && item.playable ? "0 0 0 3px rgba(99,102,241,0.25), 0 8px 24px rgba(0,0,0,0.4)" : "none",
+                      transform:    isSel ? "scale(1.04)" : "scale(1)",
+                      opacity:      item.playable ? 1 : 0.5,
+                    }}
                   >
-                    {controllerCount > 0 ? "A  ·  Start" : "Start Game"}
+                    <span style={s.tileIcon}>{item.icon}</span>
+                    <span style={s.tileName}>{item.name}</span>
+                    <span style={s.tileSub}>
+                      {item.playable ? item.sub : "Coming soon"}
+                    </span>
+                    {!item.playable && isSel && (
+                      <span style={s.soonBadge}>SOON</span>
+                    )}
                   </button>
-                ) : (
-                  <span style={s.hostWait}>Host picks</span>
-                )}
-              </div>
-            ) : (
-              <div style={{ ...s.gameCard, color: "rgba(255,255,255,0.3)", fontStyle: "italic", fontSize: "1.5vw" }}>
-                No games available
-              </div>
-            )}
+                );
+              })}
+            </div>
+
+            {/* Action row below shelf */}
+            <div style={s.shelfAction}>
+              {controllerCount > 0 && (
+                <span style={s.hint}>← → select · A launch</span>
+              )}
+              <div style={{ flex: 1 }} />
+              {canStart ? (
+                <button
+                  onClick={() => onLaunch?.(selectedItem.id)}
+                  style={s.launchBtn}
+                >
+                  {controllerCount > 0 ? "A  ·  Launch" : "Launch Game"}
+                </button>
+              ) : selectedItem?.playable ? (
+                <span style={s.hostWait}>Host picks the game</span>
+              ) : (
+                <span style={s.hostWait}>Not available yet</span>
+              )}
+            </div>
           </div>
 
         </div>
@@ -294,24 +322,18 @@ export function ConsoleHomeView({
   );
 }
 
-// QR code size: 20% of the shorter viewport side, 160–280px.
-function qrSize(): number {
-  if (typeof window === "undefined") return 200;
-  return Math.max(160, Math.min(280, Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.20)));
+function qrPx(): number {
+  if (typeof window === "undefined") return 180;
+  return Math.max(140, Math.min(260, Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.18)));
 }
 
-// ── Styles ─────────────────────────────────────────────────────────────────────
-// All sizes use vw/vh so a 65" 1080p TV (1920×1080) gives readable scale.
-// Minimums keep things usable on a laptop at dev time.
+// ── Styles ────────────────────────────────────────────────────────────────────
 
 const s: Record<string, React.CSSProperties> = {
   root: {
-    height: "100dvh",
-    display: "flex", flexDirection: "column",
-    background: "#0c0c14",
-    color: "#f0f0f8",
-    fontFamily: "'Inter', sans-serif",
-    overflow: "hidden",
+    height: "100dvh", display: "flex", flexDirection: "column",
+    background: "#0c0c14", color: "#f0f0f8",
+    fontFamily: "'Inter', sans-serif", overflow: "hidden",
   },
 
   overlay: {
@@ -352,184 +374,139 @@ const s: Record<string, React.CSSProperties> = {
     height: "clamp(52px, 7vh, 80px)",
     borderBottom: "1px solid rgba(255,255,255,0.07)",
   },
-  logo: {
-    fontSize: "clamp(22px, 3.5vw, 60px)",
-    fontWeight: 900, letterSpacing: "-0.02em", flex: 1,
-  },
+  logo: { fontSize: "clamp(22px, 3.5vw, 56px)", fontWeight: 900, letterSpacing: "-0.02em", flex: 1 },
   headerRight: { display: "flex", alignItems: "center", gap: "clamp(12px, 2vw, 32px)" },
   ctrlBadge: {
-    display: "flex", alignItems: "center", gap: "0.5vw",
-    fontSize: "clamp(11px, 1.1vw, 20px)",
-    color: "#4ade80",
+    display: "flex", alignItems: "center", gap: "0.6em",
+    fontSize: "clamp(11px, 1.1vw, 20px)", color: "#4ade80",
     padding: "0.3em 0.9em",
-    background: "rgba(74,222,128,0.08)",
-    border: "1px solid rgba(74,222,128,0.2)",
+    background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)",
     borderRadius: 99,
   },
   ctrlDot: {
-    width: "0.6vw", height: "0.6vw",
-    minWidth: 7, minHeight: 7,
+    width: "0.6em", height: "0.6em",
     borderRadius: "50%", background: "#4ade80", display: "inline-block",
   },
   clock: {
-    fontSize: "clamp(14px, 2vw, 36px)",
-    fontWeight: 700, fontVariantNumeric: "tabular-nums",
-    color: "rgba(255,255,255,0.55)",
+    fontSize: "clamp(14px, 2vw, 36px)", fontWeight: 700,
+    fontVariantNumeric: "tabular-nums", color: "rgba(255,255,255,0.55)",
   },
 
   main: {
-    flex: 1,
-    display: "flex",
-    padding: "clamp(16px, 3vh, 40px) clamp(20px, 3vw, 48px)",
+    flex: 1, display: "flex", minHeight: 0, overflow: "hidden",
+    padding: "clamp(14px, 2.5vh, 36px) clamp(20px, 3vw, 48px)",
     gap: "clamp(16px, 3vw, 48px)",
-    minHeight: 0, overflow: "hidden",
   },
 
-  // Left col — join info
   leftCol: {
-    flexShrink: 0,
-    width: "clamp(180px, 22vw, 360px)",
-    display: "flex", flexDirection: "column",
-    alignItems: "center",
-    gap: "clamp(8px, 1.5vh, 20px)",
+    flexShrink: 0, width: "clamp(160px, 20vw, 320px)",
+    display: "flex", flexDirection: "column", alignItems: "center",
+    gap: "clamp(8px, 1.2vh, 18px)",
   },
   qrBox: {
-    background: "#fff",
-    padding: "clamp(8px, 1vw, 16px)",
-    borderRadius: "clamp(8px, 1vw, 16px)",
-    flexShrink: 0,
+    background: "#fff", flexShrink: 0,
+    padding: "clamp(8px, 1vw, 14px)",
+    borderRadius: "clamp(8px, 1vw, 14px)",
   },
   roomCode: {
-    fontSize: "clamp(32px, 5.5vw, 100px)",
-    fontWeight: 900,
-    letterSpacing: "0.15em",
-    color: "#fff",
-    lineHeight: 1,
+    fontSize: "clamp(30px, 5vw, 96px)", fontWeight: 900,
+    letterSpacing: "0.15em", color: "#fff", lineHeight: 1,
   },
   joinAddr: {
-    fontSize: "clamp(9px, 0.9vw, 16px)",
-    color: "rgba(255,255,255,0.3)",
-    textAlign: "center",
-    wordBreak: "break-all",
-    margin: 0,
-    fontFamily: "monospace",
+    fontSize: "clamp(9px, 0.85vw, 15px)", color: "rgba(255,255,255,0.3)",
+    textAlign: "center", wordBreak: "break-all", margin: 0, fontFamily: "monospace",
   },
 
-  divider: {
-    width: 1, background: "rgba(255,255,255,0.07)", flexShrink: 0, alignSelf: "stretch",
-  },
+  divider: { width: 1, background: "rgba(255,255,255,0.07)", flexShrink: 0, alignSelf: "stretch" },
 
-  // Right col — players + game
   rightCol: {
-    flex: 1,
-    display: "flex", flexDirection: "column",
-    gap: "clamp(12px, 2.5vh, 32px)",
-    justifyContent: "center",
-    minWidth: 0,
+    flex: 1, display: "flex", flexDirection: "column",
+    gap: "clamp(12px, 2.5vh, 28px)", justifyContent: "center", minWidth: 0,
   },
-  section: { display: "flex", flexDirection: "column", gap: "clamp(6px, 1vh, 14px)" },
+  section: { display: "flex", flexDirection: "column", gap: "clamp(6px, 1vh, 12px)" },
 
   label: {
-    margin: 0,
-    fontSize: "clamp(10px, 1vw, 17px)",
-    fontWeight: 700, letterSpacing: "0.12em",
-    textTransform: "uppercase",
-    color: "rgba(255,255,255,0.35)",
+    margin: 0, fontSize: "clamp(10px, 1vw, 16px)", fontWeight: 700,
+    letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.35)",
   },
 
   playerGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "clamp(6px, 1vw, 14px)",
+    display: "grid", gridTemplateColumns: "1fr 1fr",
+    gap: "clamp(6px, 0.8vw, 12px)",
   },
   playerSlot: {
-    display: "flex", alignItems: "center",
-    gap: "clamp(8px, 1vw, 16px)",
-    padding: "clamp(8px, 1.2vh, 18px) clamp(10px, 1.2vw, 20px)",
-    borderRadius: "clamp(8px, 1vw, 16px)",
+    display: "flex", alignItems: "center", gap: "clamp(8px, 1vw, 14px)",
+    padding: "clamp(8px, 1.2vh, 16px) clamp(10px, 1.2vw, 18px)",
+    borderRadius: "clamp(8px, 1vw, 14px)",
     transition: "background 0.3s, border-color 0.3s",
   },
-  dot: {
-    width: "clamp(8px, 0.9vw, 16px)", height: "clamp(8px, 0.9vw, 16px)",
-    borderRadius: "50%", flexShrink: 0,
+  dot: { width: "clamp(8px, 0.8vw, 14px)", height: "clamp(8px, 0.8vw, 14px)", borderRadius: "50%", flexShrink: 0 },
+  playerName: { fontSize: "clamp(13px, 1.5vw, 26px)", fontWeight: 700, lineHeight: 1.2 },
+  playerSub:  { fontSize: "clamp(9px, 0.85vw, 14px)", color: "rgba(255,255,255,0.35)", marginTop: "0.2em" },
+
+  // ── Game shelf ──
+  shelf: {
+    display: "flex", gap: "clamp(8px, 1vw, 16px)",
+    overflowX: "auto", paddingBottom: 4,
+    // hide scrollbar — navigation is via D-pad
+    scrollbarWidth: "none",
   },
-  playerName: {
-    fontSize: "clamp(13px, 1.6vw, 28px)",
-    fontWeight: 700,
-    lineHeight: 1.2,
+  tile: {
+    flexShrink: 0,
+    width: "clamp(110px, 12vw, 190px)", height: "clamp(110px, 14vh, 180px)",
+    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+    gap: "clamp(4px, 0.6vh, 8px)",
+    border: "2px solid", borderRadius: "clamp(10px, 1.2vw, 18px)",
+    cursor: "pointer",
+    transition: "transform 0.15s ease, box-shadow 0.15s ease, background 0.15s, border-color 0.15s",
+    position: "relative", outline: "none",
+    fontFamily: "'Inter', sans-serif",
+    padding: "clamp(8px, 1vh, 14px)",
   },
-  playerSub: {
-    fontSize: "clamp(9px, 0.9vw, 15px)",
-    color: "rgba(255,255,255,0.35)",
-    marginTop: "0.2em",
+  tileIcon: { fontSize: "clamp(24px, 3.5vw, 52px)", lineHeight: 1 },
+  tileName: { fontSize: "clamp(11px, 1.2vw, 20px)", fontWeight: 800, color: "#f0f0f8", textAlign: "center" },
+  tileSub:  { fontSize: "clamp(8px, 0.85vw, 13px)", color: "rgba(255,255,255,0.4)", textAlign: "center" },
+  soonBadge: {
+    position: "absolute", top: "clamp(4px, 0.5vh, 8px)", right: "clamp(4px, 0.5vw, 8px)",
+    fontSize: "clamp(7px, 0.7vw, 10px)", fontWeight: 800, letterSpacing: 1,
+    color: "rgba(255,255,255,0.5)",
+    padding: "2px 6px", borderRadius: 99,
+    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
   },
 
-  gameCard: {
-    display: "flex", alignItems: "center",
-    gap: "clamp(12px, 2vw, 28px)",
-    padding: "clamp(12px, 2vh, 24px) clamp(14px, 1.8vw, 28px)",
-    background: "rgba(255,255,255,0.04)",
-    borderRadius: "clamp(10px, 1.2vw, 20px)",
-    transition: "border-color 0.15s, box-shadow 0.15s",
+  shelfAction: {
+    display: "flex", alignItems: "center", gap: "clamp(8px, 1.5vw, 20px)",
+    marginTop: "clamp(2px, 0.5vh, 8px)",
   },
-  gameName: {
-    fontSize: "clamp(16px, 2.2vw, 40px)",
-    fontWeight: 800, marginBottom: "0.2em",
-  },
-  gameSub: {
-    fontSize: "clamp(10px, 1vw, 18px)",
-    color: "rgba(255,255,255,0.45)",
-  },
+  hint: { fontSize: "clamp(10px, 1vw, 16px)", color: "rgba(255,255,255,0.28)", letterSpacing: "0.05em" },
   launchBtn: {
-    marginLeft: "auto", flexShrink: 0,
-    padding: "clamp(8px, 1.2vh, 18px) clamp(16px, 2vw, 36px)",
-    fontSize: "clamp(12px, 1.5vw, 26px)",
-    fontWeight: 800,
-    background: "#6366f1",
-    color: "#fff",
-    border: "2px solid transparent",
-    borderRadius: "clamp(8px, 0.8vw, 14px)",
-    cursor: "pointer",
-    fontFamily: "'Inter', sans-serif",
-    transition: "transform 0.1s, box-shadow 0.15s",
+    padding: "clamp(8px, 1.2vh, 16px) clamp(16px, 2vw, 32px)",
+    fontSize: "clamp(12px, 1.5vw, 24px)", fontWeight: 800,
+    background: "#6366f1", color: "#fff",
+    border: "none", borderRadius: "clamp(8px, 0.8vw, 12px)",
+    cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    boxShadow: "0 0 0 3px rgba(99,102,241,0.3), 0 4px 16px rgba(99,102,241,0.25)",
   },
-  launchBtnFocused: {
-    boxShadow: "0 0 0 4px rgba(99,102,241,0.4), 0 0 24px rgba(99,102,241,0.3)",
-    transform: "scale(1.03)",
-  },
-  hostWait: {
-    marginLeft: "auto",
-    fontSize: "clamp(11px, 1vw, 18px)",
-    color: "rgba(255,255,255,0.3)",
-    fontStyle: "italic",
-  },
+  hostWait: { fontSize: "clamp(11px, 1vw, 17px)", color: "rgba(255,255,255,0.3)", fontStyle: "italic" },
 
   footer: {
-    flexShrink: 0,
-    height: "clamp(44px, 7vh, 72px)",
+    flexShrink: 0, height: "clamp(44px, 7vh, 68px)",
     display: "flex", alignItems: "center",
-    gap: "clamp(8px, 1.5vw, 24px)",
-    padding: "0 clamp(20px, 3vw, 48px)",
+    gap: "clamp(8px, 1.5vw, 24px)", padding: "0 clamp(20px, 3vw, 48px)",
     borderTop: "1px solid rgba(255,255,255,0.07)",
   },
-  btLabel: { fontSize: "clamp(10px, 1vw, 18px)", color: "rgba(255,255,255,0.45)" },
+  btLabel: { fontSize: "clamp(10px, 1vw, 17px)", color: "rgba(255,255,255,0.45)" },
   btTrack: {
     width: "clamp(80px, 10vw, 180px)", height: "clamp(3px, 0.3vh, 5px)",
     background: "rgba(255,255,255,0.08)", borderRadius: 99, overflow: "hidden",
   },
-  btFill: {
-    height: "100%", background: "#6366f1", borderRadius: 99,
-    transition: "width 1s linear",
-  },
+  btFill: { height: "100%", background: "#6366f1", borderRadius: 99, transition: "width 1s linear" },
 
   btn: {
-    padding: "clamp(6px, 0.8vh, 12px) clamp(12px, 1.5vw, 24px)",
-    fontSize: "clamp(10px, 1vw, 18px)",
-    fontWeight: 700,
-    background: "rgba(255,255,255,0.05)",
-    color: "rgba(255,255,255,0.55)",
-    border: "1px solid rgba(255,255,255,0.1)",
-    borderRadius: 99, cursor: "pointer",
+    padding: "clamp(6px, 0.8vh, 12px) clamp(12px, 1.5vw, 22px)",
+    fontSize: "clamp(10px, 1vw, 17px)", fontWeight: 700,
+    background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.55)",
+    border: "1px solid rgba(255,255,255,0.1)", borderRadius: 99, cursor: "pointer",
     fontFamily: "'Inter', sans-serif",
   },
 };

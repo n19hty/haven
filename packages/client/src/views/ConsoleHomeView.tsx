@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { RoomState, Player, GameMeta } from "@haven/shared";
 import { ControllerInput } from "../games/registry";
+import { BTWizard } from "../components/BTWizard";
 
 interface Props {
   roomState: RoomState;
@@ -46,28 +47,8 @@ export function ConsoleHomeView({
   const joinUrl = `${base}?join=${room.code}`;
   const netAddr = base.replace(/^https?:\/\//, "");
 
-  // ── Bluetooth pairing ─────────────────────────────────────────────────────
-  const [btPhase, setBtPhase]       = useState<"idle" | "scanning">("idle");
-  const [btSecsLeft, setBtSecsLeft] = useState(30);
-
-  const startPairing = useCallback(async () => {
-    try { await fetch("/api/bt/scan", { method: "POST" }); } catch { /* ok */ }
-    setBtPhase("scanning");
-    setBtSecsLeft(30);
-  }, []);
-
-  useEffect(() => {
-    if (btPhase !== "scanning") return;
-    const t = setInterval(() => {
-      setBtSecsLeft((s) => {
-        if (s <= 1) { clearInterval(t); setBtPhase("idle"); return 0; }
-        return s - 1;
-      });
-    }, 1000);
-    return () => clearInterval(t);
-  }, [btPhase]);
-
-  useEffect(() => { if (controllerCount > 0) setBtPhase("idle"); }, [controllerCount]);
+  // ── Bluetooth pairing wizard ──────────────────────────────────────────────
+  const [btWizardOpen, setBtWizardOpen] = useState(false);
 
   // ── Game shelf + controller nav ───────────────────────────────────────────
   const allItems = [
@@ -76,11 +57,10 @@ export function ConsoleHomeView({
   ];
 
   const [selected, setSelected] = useState(0);
-  const selectedRef   = useRef(selected); selectedRef.current = selected;
-  const allItemsRef   = useRef(allItems); allItemsRef.current = allItems;
-  const isHostRef     = useRef(isHost);   isHostRef.current   = isHost;
-  const onLaunchRef   = useRef(onLaunch); onLaunchRef.current = onLaunch;
-  const startPairingRef = useRef(startPairing); startPairingRef.current = startPairing;
+  const selectedRef = useRef(selected); selectedRef.current = selected;
+  const allItemsRef = useRef(allItems); allItemsRef.current = allItems;
+  const isHostRef   = useRef(isHost);   isHostRef.current   = isHost;
+  const onLaunchRef = useRef(onLaunch); onLaunchRef.current = onLaunch;
 
   useEffect(() => {
     if (!controllerInput) return;
@@ -92,7 +72,7 @@ export function ConsoleHomeView({
         const item = items[selectedRef.current];
         if (item?.playable && isHostRef.current) onLaunchRef.current?.(item.id);
       }
-      if (e.control === "back") startPairingRef.current();
+      if (e.control === "back") setBtWizardOpen(true);
     });
   }, [controllerInput]);
 
@@ -156,6 +136,13 @@ export function ConsoleHomeView({
 
   return (
     <div style={s.root}>
+      {btWizardOpen && (
+        <BTWizard
+          onClose={() => setBtWizardOpen(false)}
+          existingControllers={controllerCount}
+          controllerInput={controllerInput}
+        />
+      )}
 
       {/* ── Update overlay ──────────────────────────────────────────────── */}
       {updating && (
@@ -300,19 +287,9 @@ export function ConsoleHomeView({
 
       {/* ── Footer ──────────────────────────────────────────────────────── */}
       <footer style={s.footer}>
-        {btPhase === "scanning" ? (
-          <>
-            <span style={s.btLabel}>Searching… {btSecsLeft}s · hold Xbox + pair</span>
-            <div style={s.btTrack}>
-              <div style={{ ...s.btFill, width: `${Math.round(((30 - btSecsLeft) / 30) * 100)}%` }} />
-            </div>
-            <button onClick={() => setBtPhase("idle")} style={s.btn}>Cancel</button>
-          </>
-        ) : (
-          <button onClick={startPairing} style={s.btn}>
-            🎮  {controllerCount > 0 ? "Pair another controller" : "Pair controller"}
-          </button>
-        )}
+        <button onClick={() => setBtWizardOpen(true)} style={s.btn}>
+          🎮  {controllerCount > 0 ? "Pair another controller" : "Pair controller"}
+        </button>
       </footer>
 
     </div>
@@ -492,13 +469,6 @@ const s: Record<string, React.CSSProperties> = {
     gap: "clamp(8px, 1.5vw, 24px)", padding: "0 clamp(20px, 3vw, 48px)",
     borderTop: "1px solid rgba(255,255,255,0.07)",
   },
-  btLabel: { fontSize: "clamp(10px, 1vw, 17px)", color: "rgba(255,255,255,0.45)" },
-  btTrack: {
-    width: "clamp(80px, 10vw, 180px)", height: "clamp(3px, 0.3vh, 5px)",
-    background: "rgba(255,255,255,0.08)", borderRadius: 99, overflow: "hidden",
-  },
-  btFill: { height: "100%", background: "#6366f1", borderRadius: 99, transition: "width 1s linear" },
-
   btn: {
     padding: "clamp(6px, 0.8vh, 12px) clamp(12px, 1.5vw, 22px)",
     fontSize: "clamp(10px, 1vw, 17px)", fontWeight: 700,
